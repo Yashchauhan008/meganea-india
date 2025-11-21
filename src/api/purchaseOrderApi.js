@@ -14,9 +14,13 @@ export const getPurchaseOrderById = (id) => {
   return api.get(`/purchase-orders/${id}`);
 };
 
-// --- ADD THIS NEW FUNCTION ---
-// @desc    Update the status of a Purchase Order
-// @route   PATCH /api/purchase-orders/:id/status
 export const updatePOStatus = (id, newStatus) => {
   return api.patch(`/purchase-orders/${id}/status`, { status: newStatus });
+};
+
+// --- ADD THIS NEW FUNCTION ---
+// @desc    Record a QC result for a PO item
+// @route   POST /api/purchase-orders/:poId/items/:itemId/qc
+export const recordQCForItem = (poId, itemId, qcData) => {
+  return api.post(`/purchase-orders/${poId}/items/${itemId}/qc`, qcData);
 };

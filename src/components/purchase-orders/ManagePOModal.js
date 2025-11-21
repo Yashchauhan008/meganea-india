@@ -1,50 +1,57 @@
 // frontend/src/components/purchase-orders/ManagePOModal.js
 
 import React, { useState, useEffect } from 'react';
-// --- 1. IMPORT THE NEW API FUNCTION ---
 import { getPurchaseOrderById, updatePOStatus } from '../../api/purchaseOrderApi';
-import { Loader2, X, Factory, Calendar, User, FileText, Hash, Box, Package, Container } from 'lucide-react';
+import { Loader2, X, Factory, Calendar, User, FileText, Box, Package, Container, CheckSquare, History, PlayCircle } from 'lucide-react'; // Added PlayCircle icon
 import { format } from 'date-fns';
+import RecordQCModal from './RecordQCModal';
 
 const ManagePOModal = ({ poId, onClose }) => {
     const [po, setPo] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    // --- 2. ADD STATE FOR THE BUTTON ACTION ---
     const [isUpdating, setIsUpdating] = useState(false);
+    const [isQcModalOpen, setIsQcModalOpen] = useState(false);
+    const [selectedItemForQc, setSelectedItemForQc] = useState(null);
+
+    const fetchPO = async () => {
+        if (!poId) return;
+        setLoading(true);
+        setError('');
+        try {
+            const { data } = await getPurchaseOrderById(poId);
+            setPo(data);
+        } catch (err) {
+            setError('Failed to load Purchase Order details.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchPO = async () => {
-            if (!poId) return;
-            setLoading(true);
-            setError('');
-            try {
-                const { data } = await getPurchaseOrderById(poId);
-                setPo(data);
-            } catch (err) {
-                setError('Failed to load Purchase Order details.');
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchPO();
     }, [poId]);
 
-    // --- 3. CREATE THE HANDLER FUNCTION ---
     const handleUpdateStatus = async (newStatus) => {
-        if (!window.confirm(`Are you sure you want to change the status to "${newStatus}"?`)) {
-            return;
-        }
+        if (!window.confirm(`Are you sure you want to change the status to "${newStatus}"?`)) return;
         setIsUpdating(true);
         try {
             const { data } = await updatePOStatus(poId, newStatus);
-            // Update the local state to instantly reflect the change in the UI
             setPo(data); 
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to update status.');
         } finally {
             setIsUpdating(false);
         }
+    };
+
+    const handleOpenQcModal = (item) => {
+        setSelectedItemForQc(item);
+        setIsQcModalOpen(true);
+    };
+
+    const handleSaveQc = (updatedPO) => {
+        setPo(updatedPO);
     };
 
     const getStatusColor = (status) => {
@@ -64,8 +71,17 @@ const ManagePOModal = ({ poId, onClose }) => {
 
     return (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4 animate-fade-in">
+            {isQcModalOpen && (
+                <RecordQCModal
+                    poId={po._id}
+                    item={selectedItemForQc}
+                    onClose={() => setIsQcModalOpen(false)}
+                    onSave={handleSaveQc}
+                />
+            )}
+
             <div 
-                className="bg-foreground dark:bg-dark-foreground rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+                className="bg-foreground dark:bg-dark-foreground rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
                 {/* Header (no changes) */}
@@ -82,16 +98,11 @@ const ManagePOModal = ({ poId, onClose }) => {
                 {/* Body (no changes) */}
                 <div className="flex-grow overflow-y-auto p-6">
                     {/* ... (loading, error, and PO details display remain the same) ... */}
-                    {loading && (
-                        <div className="flex justify-center items-center h-full">
-                            <Loader2 size={32} className="animate-spin text-primary" />
-                        </div>
-                    )}
+                    {loading && <div className="flex justify-center items-center h-full"><Loader2 size={32} className="animate-spin text-primary" /></div>}
                     {error && <p className="text-center text-red-500">{error}</p>}
                     
                     {po && (
                         <div className="space-y-6">
-                            {/* Key Details Grid */}
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div className="p-4 bg-background dark:bg-dark-background rounded-lg">
                                     <div className="text-sm text-text-secondary flex items-center gap-2"><Factory size={14}/> Factory</div>
@@ -105,53 +116,101 @@ const ManagePOModal = ({ poId, onClose }) => {
                                     <div className="text-sm text-text-secondary flex items-center gap-2"><Calendar size={14}/> Created Date</div>
                                     <div className="text-lg font-bold text-text dark:text-dark-text">{format(new Date(po.createdAt), 'dd MMM, yyyy')}</div>
                                 </div>
-                                <div className="p-4 bg-background dark:bg-dark-background rounded-lg">
-                                    <div className="text-sm text-text-secondary flex items-center gap-2"><User size={14}/> Created By</div>
-                                    <div className="text-lg font-bold text-text dark:text-dark-text">{po.createdBy.username}</div>
-                                </div>
-                                <div className="p-4 bg-background dark:bg-dark-background rounded-lg col-span-1 md:col-span-2">
-                                    <div className="text-sm text-text-secondary flex items-center gap-2"><FileText size={14}/> Source Request</div>
-                                    <div className="text-lg font-bold text-text dark:text-dark-text">{po.sourceRestockRequest?.requestId || 'Manual PO'}</div>
-                                </div>
                             </div>
 
-                            {/* Ordered Items Section */}
                             <div>
-                                <h3 className="text-lg font-semibold mb-3 text-text dark:text-dark-text">Ordered Items & Packing</h3>
-                                <div className="border border-border dark:border-dark-border rounded-lg p-4 space-y-3">
-                                    <div className="grid grid-cols-3 gap-4 text-center text-sm text-text-secondary">
-                                        <div className="flex items-center justify-center gap-2"><Package size={16}/> {po.packingRules.boxesPerPallet} boxes/pallet</div>
-                                        <div className="flex items-center justify-center gap-2"><Box size={16}/> {po.packingRules.boxesPerKhatli} boxes/khatli</div>
-                                        <div className="flex items-center justify-center gap-2"><Container size={16}/> {po.packingRules.palletsPerContainer} pallets/container</div>
-                                    </div>
-                                    <div className="border-t border-border dark:border-dark-border my-3"></div>
-                                    {po.items.map((item, index) => (
-                                        <div key={index} className="grid grid-cols-4 gap-4 items-center">
-                                            <div className="col-span-2 font-semibold text-text dark:text-dark-text">{item.tile.name}</div>
-                                            <div className="text-sm text-text-secondary">Pallets: {item.palletsOrdered}</div>
-                                            <div className="text-sm text-text-secondary">Khatlis: {item.khatlisOrdered}</div>
-                                        </div>
-                                    ))}
+                                <h3 className="text-lg font-semibold mb-3 text-text dark:text-dark-text">Ordered Items</h3>
+                                <div className="space-y-4">
+                                    {po.items.map((item) => {
+                                        const totalBoxes = (item.palletsOrdered * po.packingRules.boxesPerPallet) + (item.khatlisOrdered * po.packingRules.boxesPerKhatli);
+                                        const qcProgress = totalBoxes > 0 ? (item.quantityPassedQC / totalBoxes) * 100 : 0;
+                                        
+                                        return (
+                                            <div key={item._id} className="p-4 border border-border dark:border-dark-border rounded-lg">
+                                                <div className="flex flex-col sm:flex-row justify-between sm:items-center">
+                                                    <div>
+                                                        <p className="font-bold text-lg text-text dark:text-dark-text">{item.tile.name}</p>
+                                                        <p className="text-sm text-text-secondary">
+                                                            {item.palletsOrdered} pallets, {item.khatlisOrdered} khatlis ({totalBoxes} total boxes)
+                                                        </p>
+                                                    </div>
+                                                    <div className="mt-2 sm:mt-0">
+                                                        <button 
+                                                            onClick={() => handleOpenQcModal(item)}
+                                                            disabled={!['Manufacturing', 'QC_InProgress'].includes(po.status)}
+                                                            className="flex items-center gap-2 text-sm font-semibold bg-primary/10 text-primary px-3 py-2 rounded-md hover:bg-primary/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                                        >
+                                                            <CheckSquare size={16} /> Record QC
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="mt-3">
+                                                    <div className="flex justify-between text-xs text-text-secondary mb-1">
+                                                        <span>QC Progress</span>
+                                                        <span>{item.quantityPassedQC} / {totalBoxes} boxes</span>
+                                                    </div>
+                                                    <div className="w-full bg-background dark:bg-dark-background rounded-full h-2.5">
+                                                        <div className="bg-green-500 h-2.5 rounded-full" style={{ width: `${qcProgress}%` }}></div>
+                                                    </div>
+                                                </div>
+
+                                                {item.qcHistory && item.qcHistory.length > 0 && (
+                                                    <div className="mt-4 border-t border-border dark:border-dark-border pt-3">
+                                                        <h5 className="text-xs font-bold text-text-secondary flex items-center gap-2 mb-2"><History size={14}/> QC History</h5>
+                                                        <div className="space-y-2 max-h-32 overflow-y-auto pr-2">
+                                                            {item.qcHistory.map(rec => (
+                                                                <div key={rec._id} className="text-xs p-2 bg-background dark:bg-dark-background rounded-md">
+                                                                    <div className="flex justify-between">
+                                                                        <span>Checked by {rec.checkedBy?.username || '...'} on {format(new Date(rec.qcDate), 'dd MMM')}</span>
+                                                                        <div className="font-semibold">
+                                                                            <span className="text-green-600">Passed: {rec.quantityPassed}</span>, <span className="text-red-600">Failed: {rec.quantityFailed}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                    {rec.notes && <p className="text-text-secondary mt-1 italic">"{rec.notes}"</p>}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         </div>
                     )}
                 </div>
 
-                {/* Footer with Actions */}
+                {/* --- UPDATED FOOTER WITH NEW BUTTON --- */}
                 <div className="p-4 bg-background dark:bg-dark-background/50 border-t border-border dark:border-dark-border flex justify-end gap-3">
                     <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-text-secondary rounded-md bg-foreground dark:bg-dark-border hover:bg-gray-100">
                         Close
                     </button>
-                    {/* --- 4. UPDATE THE BUTTON --- */}
-                    <button 
-                        onClick={() => handleUpdateStatus('SentToFactory')}
-                        disabled={po?.status !== 'Draft' || isUpdating} 
-                        className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-md hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2"
-                    >
-                        {isUpdating && <Loader2 size={16} className="animate-spin" />}
-                        Send to Factory
-                    </button>
+                    
+                    {/* "Send to Factory" button - only shows if status is Draft */}
+                    {po?.status === 'Draft' && (
+                        <button 
+                            onClick={() => handleUpdateStatus('SentToFactory')}
+                            disabled={isUpdating} 
+                            className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-md hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isUpdating && <Loader2 size={16} className="animate-spin" />}
+                            Send to Factory
+                        </button>
+                    )}
+
+                    {/* "Start Manufacturing" button - only shows if status is SentToFactory */}
+                    {po?.status === 'SentToFactory' && (
+                        <button 
+                            onClick={() => handleUpdateStatus('Manufacturing')}
+                            disabled={isUpdating} 
+                            className="px-4 py-2 text-sm font-semibold text-white bg-yellow-500 rounded-md hover:bg-yellow-600 disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isUpdating && <Loader2 size={16} className="animate-spin" />}
+                            <PlayCircle size={16} />
+                            Start Manufacturing
+                        </button>
+                    )}
                 </div>
             </div>
         </div>
