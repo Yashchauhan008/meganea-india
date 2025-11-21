@@ -297,9 +297,9 @@ const CreatePurchaseOrderPage = () => {
         
         return restockRequest.requestedItems.filter(item => {
             const isFactoryMatch = item.tile.manufacturingFactories?.some(factory => factory._id === selectedFactoryId);
-            const isNotFullyAssigned = item.quantityInPO < item.quantityRequested;
+            // We allow adding to a PO even if it's fully assigned, to enable over-provisioning.
             const isNotInCurrentPOForm = !poItems.some(poItem => poItem.tile._id === item.tile._id);
-            return isFactoryMatch && isNotFullyAssigned && isNotInCurrentPOForm;
+            return isFactoryMatch && isNotInCurrentPOForm;
         });
     }, [restockRequest, selectedFactoryId, poItems]);
 
@@ -324,7 +324,6 @@ const CreatePurchaseOrderPage = () => {
         setNotes('');
     };
 
-    // --- THIS IS THE FINAL, CORRECTED SUBMIT HANDLER ---
     const handleSubmitPO = async (e) => {
         e.preventDefault();
         setSubmitting(true);
@@ -338,15 +337,8 @@ const CreatePurchaseOrderPage = () => {
                 items: poItems.map(item => ({ tileId: item.tile._id, palletsOrdered: item.palletsOrdered, khatlisOrdered: item.khatlisOrdered })),
             };
             
-            // The backend sends back the updated restockRequest object.
             const { data } = await createPurchaseOrder(poData);
-            
-            // *** THE CRUCIAL FIX ***
-            // We explicitly update the state with the fresh data from the server.
-            // This will cause the entire component to re-render with the correct "Pending" values.
             setRestockRequest(data.restockRequest);
-            
-            // Now, we reset the form for the next PO.
             resetForm();
 
         } catch (err) {
@@ -355,7 +347,6 @@ const CreatePurchaseOrderPage = () => {
             setSubmitting(false);
         }
     };
-    // --- END OF CORRECTION ---
 
     if (loading && !restockRequest) return <div className="flex justify-center items-center h-screen"><Loader2 className="animate-spin text-primary" size={48} /></div>;
     if (error) return <div className="p-8 text-center text-red-500 bg-red-100 dark:bg-red-900/30 rounded-lg">{error}</div>;
@@ -379,8 +370,8 @@ const CreatePurchaseOrderPage = () => {
                 <div className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200 p-4 rounded-lg flex items-center gap-4 mb-6">
                     <CheckCircle />
                     <div>
-                        <h3 className="font-bold">All items assigned!</h3>
-                        <p className="text-sm">All tiles from the restock request have been assigned to a purchase order.</p>
+                        <h3 className="font-bold">All items fulfilled!</h3>
+                        <p className="text-sm">All tiles from the restock request have been assigned to a purchase order (some may be over-assigned).</p>
                     </div>
                 </div>
             )}
@@ -390,11 +381,32 @@ const CreatePurchaseOrderPage = () => {
                     <h2 className="text-xl font-bold mb-4 flex items-center gap-2 text-text dark:text-dark-text"><ClipboardList /> Pending Items</h2>
                     <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
                         {restockRequest.requestedItems.map(item => {
-                            const isFullyAssigned = item.quantityInPO >= item.quantityRequested;
+                            // --- THIS IS THE NEW, SMARTER UI LOGIC ---
+                            const isOverAssigned = item.quantityInPO > item.quantityRequested;
+                            const isExactlyAssigned = item.quantityInPO === item.quantityRequested;
                             const pendingQty = item.quantityRequested - item.quantityInPO;
+                            
+                            let statusText;
+                            let statusColor;
+                            let progressWidth;
+
+                            if (isOverAssigned) {
+                                statusText = `Assigned: ${item.quantityInPO}`;
+                                statusColor = 'text-blue-500'; // A different color for over-assignment
+                                progressWidth = 100; // Cap the bar at 100%
+                            } else if (isExactlyAssigned) {
+                                statusText = 'Fully Assigned';
+                                statusColor = 'text-green-600';
+                                progressWidth = 100;
+                            } else {
+                                statusText = `Pending: ${pendingQty}`;
+                                statusColor = 'text-yellow-600';
+                                progressWidth = (item.quantityInPO / item.quantityRequested) * 100;
+                            }
+                            // --- END OF NEW LOGIC ---
 
                             return (
-                                <div key={item.tile._id} className={`p-3 rounded-lg border ${isFullyAssigned ? 'bg-green-50 dark:bg-green-900/20 border-green-200' : 'bg-background dark:bg-dark-background border-border'}`}>
+                                <div key={item.tile._id} className={`p-3 rounded-lg border ${isExactlyAssigned || isOverAssigned ? 'bg-green-50 dark:bg-green-900/20 border-green-200' : 'bg-background dark:bg-dark-background border-border'}`}>
                                     <div className="flex justify-between items-start">
                                         <div>
                                             <p className="font-bold text-text dark:text-dark-text">{item.tile.name}</p>
@@ -402,15 +414,15 @@ const CreatePurchaseOrderPage = () => {
                                         </div>
                                         <div className="text-right">
                                             <p className="font-bold text-lg text-primary">{item.quantityRequested} <span className="text-sm font-normal">boxes</span></p>
-                                            <p className={`text-xs font-mono ${isFullyAssigned ? 'text-green-600' : 'text-yellow-600'}`}>
-                                                {isFullyAssigned ? 'Fully Assigned' : `Pending: ${pendingQty}`}
+                                            <p className={`text-xs font-mono ${statusColor}`}>
+                                                {statusText}
                                             </p>
                                         </div>
                                     </div>
                                     <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
                                         <div 
-                                            className={`h-1.5 rounded-full ${isFullyAssigned ? 'bg-green-500' : 'bg-yellow-500'}`} 
-                                            style={{ width: `${(item.quantityInPO / item.quantityRequested) * 100}%` }}
+                                            className={`h-1.5 rounded-full ${isOverAssigned ? 'bg-blue-500' : (isExactlyAssigned ? 'bg-green-500' : 'bg-yellow-500')}`} 
+                                            style={{ width: `${progressWidth}%` }}
                                         ></div>
                                     </div>
                                 </div>
@@ -463,7 +475,7 @@ const CreatePurchaseOrderPage = () => {
                                         const totalBoxes = (item.palletsOrdered * packingRules.boxesPerPallet) + (item.khatlisOrdered * packingRules.boxesPerKhatli);
                                         const isOverAssigned = totalBoxes > item.remainingQty;
                                         return (
-                                            <div key={item.tile._id} className={`p-4 rounded-lg border relative ${isOverAssigned ? 'border-red-500' : 'border-border dark:border-dark-border'}`}>
+                                            <div key={item.tile._id} className={`p-4 rounded-lg border relative ${isOverAssigned ? 'border-yellow-500' : 'border-border dark:border-dark-border'}`}>
                                                 <button type="button" onClick={() => handleRemoveTileFromPO(item.tile._id)} className="absolute top-2 right-2 text-text-secondary hover:text-red-500 p-1"><XCircle size={16}/></button>
                                                 <p className="font-bold text-text dark:text-dark-text">{item.tile.name}</p>
                                                 <div className="grid grid-cols-3 gap-4 mt-2">
@@ -471,11 +483,11 @@ const CreatePurchaseOrderPage = () => {
                                                     <div><Label htmlFor={`khatlis-${item.tile._id}`}>Khatlis</Label><Input type="number" id={`khatlis-${item.tile._id}`} value={item.khatlisOrdered} onChange={e => handleItemQuantityChange(item.tile._id, 'khatlisOrdered', e.target.value)} /></div>
                                                     <div className="text-center">
                                                         <Label>Total Boxes</Label>
-                                                        <p className={`font-bold text-lg mt-2 ${isOverAssigned ? 'text-red-500' : 'text-text dark:text-dark-text'}`}>{totalBoxes}</p>
+                                                        <p className={`font-bold text-lg mt-2 ${isOverAssigned ? 'text-yellow-500' : 'text-text dark:text-dark-text'}`}>{totalBoxes}</p>
                                                         <p className="text-xs text-text-secondary dark:text-dark-text-secondary">Pending: {item.remainingQty}</p>
                                                     </div>
                                                 </div>
-                                                {isOverAssigned && <p className="text-xs text-red-500 mt-2">Warning: Quantity exceeds the pending amount for this request.</p>}
+                                                {isOverAssigned && <p className="text-xs text-yellow-500 mt-2">Note: This quantity is more than the pending amount for this request.</p>}
                                             </div>
                                         );
                                     })}
