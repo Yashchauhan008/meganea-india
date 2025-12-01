@@ -1,8 +1,8 @@
 // frontend/src/components/purchase-orders/ManagePOModal.js
 
-import React, { useState, useEffect } from 'react';
-import { getPurchaseOrderById, updatePOStatus } from '../../api/purchaseOrderApi';
-import { Loader2, X, Factory, Calendar, User, FileText, Box, Package, Container, CheckSquare, History, PlayCircle } from 'lucide-react'; // Added PlayCircle icon
+import React, { useState, useEffect, useMemo } from 'react';
+import { getPurchaseOrderById, updatePOStatus, generatePalletsForPO } from '../../api/purchaseOrderApi';
+import { Loader2, X, Factory, Calendar, PlayCircle, CheckSquare, History, PackageCheck, ClipboardCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import RecordQCModal from './RecordQCModal';
 
@@ -13,6 +13,13 @@ const ManagePOModal = ({ poId, onClose }) => {
     const [isUpdating, setIsUpdating] = useState(false);
     const [isQcModalOpen, setIsQcModalOpen] = useState(false);
     const [selectedItemForQc, setSelectedItemForQc] = useState(null);
+
+    // useMemo ensures this calculation only runs when the 'po' state changes.
+    // This determines if the "Generate Pallets" button should be enabled.
+    const allItemsQCPassed = useMemo(() => {
+        if (!po || !po.items) return false;
+        return po.items.every(item => item.quantityPassedQC >= item.totalBoxesOrdered);
+    }, [po]);
 
     const fetchPO = async () => {
         if (!poId) return;
@@ -45,17 +52,29 @@ const ManagePOModal = ({ poId, onClose }) => {
         }
     };
 
+    const handleGeneratePallets = async () => {
+        if (!window.confirm('This will confirm production and generate all pallet records for this PO. This action cannot be undone. Proceed?')) return;
+        setIsUpdating(true);
+        try {
+            const { data } = await generatePalletsForPO(poId);
+            setPo(data); // Update the modal with the final PO state (e.g., status: "Completed")
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to generate pallets.');
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
     const handleOpenQcModal = (item) => {
         setSelectedItemForQc(item);
         setIsQcModalOpen(true);
     };
 
     const handleSaveQc = (updatedPO) => {
-        setPo(updatedPO);
+        setPo(updatedPO); // Instantly update the main modal with the new data from the backend
     };
 
     const getStatusColor = (status) => {
-        // ... (this function remains the same)
         switch (status) {
             case 'Draft': return 'bg-blue-100 text-blue-800';
             case 'SentToFactory': return 'bg-cyan-100 text-cyan-800';
@@ -84,7 +103,6 @@ const ManagePOModal = ({ poId, onClose }) => {
                 className="bg-foreground dark:bg-dark-foreground rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
-                {/* Header (no changes) */}
                 <div className="flex justify-between items-center p-5 border-b border-border dark:border-dark-border">
                     <div>
                         <h1 className="text-2xl font-bold text-text dark:text-dark-text">Manage Purchase Order</h1>
@@ -95,9 +113,7 @@ const ManagePOModal = ({ poId, onClose }) => {
                     </button>
                 </div>
 
-                {/* Body (no changes) */}
                 <div className="flex-grow overflow-y-auto p-6">
-                    {/* ... (loading, error, and PO details display remain the same) ... */}
                     {loading && <div className="flex justify-center items-center h-full"><Loader2 size={32} className="animate-spin text-primary" /></div>}
                     {error && <p className="text-center text-red-500">{error}</p>}
                     
@@ -122,7 +138,7 @@ const ManagePOModal = ({ poId, onClose }) => {
                                 <h3 className="text-lg font-semibold mb-3 text-text dark:text-dark-text">Ordered Items</h3>
                                 <div className="space-y-4">
                                     {po.items.map((item) => {
-                                        const totalBoxes = (item.palletsOrdered * po.packingRules.boxesPerPallet) + (item.khatlisOrdered * po.packingRules.boxesPerKhatli);
+                                        const totalBoxes = item.totalBoxesOrdered;
                                         const qcProgress = totalBoxes > 0 ? (item.quantityPassedQC / totalBoxes) * 100 : 0;
                                         
                                         return (
@@ -177,17 +193,32 @@ const ManagePOModal = ({ poId, onClose }) => {
                                     })}
                                 </div>
                             </div>
+
+                            {po.generatedPallets && po.generatedPallets.length > 0 && (
+                                <div>
+                                    <h3 className="text-lg font-semibold mb-3 text-text dark:text-dark-text flex items-center gap-2">
+                                        <PackageCheck size={20} className="text-green-500" />
+                                        Generated Inventory
+                                    </h3>
+                                    <div className="p-4 bg-background dark:bg-dark-background rounded-lg">
+                                        <p className="font-semibold text-text dark:text-dark-text">
+                                            {po.generatedPallets.length} pallets/khatlis have been created and added to factory stock.
+                                        </p>
+                                        <p className="text-sm text-text-secondary">
+                                            You can now view these items on the "Factory Stock" page.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
 
-                {/* --- UPDATED FOOTER WITH NEW BUTTON --- */}
                 <div className="p-4 bg-background dark:bg-dark-background/50 border-t border-border dark:border-dark-border flex justify-end gap-3">
                     <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-text-secondary rounded-md bg-foreground dark:bg-dark-border hover:bg-gray-100">
                         Close
                     </button>
                     
-                    {/* "Send to Factory" button - only shows if status is Draft */}
                     {po?.status === 'Draft' && (
                         <button 
                             onClick={() => handleUpdateStatus('SentToFactory')}
@@ -199,7 +230,6 @@ const ManagePOModal = ({ poId, onClose }) => {
                         </button>
                     )}
 
-                    {/* "Start Manufacturing" button - only shows if status is SentToFactory */}
                     {po?.status === 'SentToFactory' && (
                         <button 
                             onClick={() => handleUpdateStatus('Manufacturing')}
@@ -209,6 +239,31 @@ const ManagePOModal = ({ poId, onClose }) => {
                             {isUpdating && <Loader2 size={16} className="animate-spin" />}
                             <PlayCircle size={16} />
                             Start Manufacturing
+                        </button>
+                    )}
+
+                    {['Manufacturing', 'QC_InProgress'].includes(po?.status) && (
+                        <button 
+                            onClick={() => handleUpdateStatus('QC_Completed')}
+                            disabled={isUpdating} 
+                            className="px-4 py-2 text-sm font-semibold text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-50 flex items-center gap-2"
+                        >
+                            {isUpdating && <Loader2 size={16} className="animate-spin" />}
+                            <ClipboardCheck size={16} />
+                            Mark QC as Completed
+                        </button>
+                    )}
+
+                    {po?.status === 'QC_Completed' && (
+                        <button 
+                            onClick={handleGeneratePallets}
+                            disabled={!allItemsQCPassed || isUpdating} 
+                            className="px-4 py-2 text-sm font-semibold text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 flex items-center gap-2"
+                            title={!allItemsQCPassed ? 'Not all items have passed QC yet.' : 'Generate all pallet records for this PO.'}
+                        >
+                            {isUpdating && <Loader2 size={16} className="animate-spin" />}
+                            <PackageCheck size={16} />
+                            Confirm Production & Generate Pallets
                         </button>
                     )}
                 </div>

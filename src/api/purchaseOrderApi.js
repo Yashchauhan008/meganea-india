@@ -18,9 +18,14 @@ export const updatePOStatus = (id, newStatus) => {
   return api.patch(`/purchase-orders/${id}/status`, { status: newStatus });
 };
 
-// --- ADD THIS NEW FUNCTION ---
-// @desc    Record a QC result for a PO item
-// @route   POST /api/purchase-orders/:poId/items/:itemId/qc
 export const recordQCForItem = (poId, itemId, qcData) => {
   return api.post(`/purchase-orders/${poId}/items/${itemId}/qc`, qcData);
+};
+
+// --- ADD THIS NEW FUNCTION ---
+// @desc    Trigger the automatic generation of pallets for a PO
+// @route   POST /api/purchase-orders/:id/generate-pallets
+export const generatePalletsForPO = (poId) => {
+  // This endpoint doesn't need a request body, just the ID in the URL
+  return api.post(`/purchase-orders/${poId}/generate-pallets`);
 };

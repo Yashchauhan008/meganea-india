@@ -33,7 +33,7 @@ const AppRoutes = () => {
                         <SidebarLayout>
                             <Routes>
                                 <Route path="/dashboard" element={<DashboardPage />} />
-                                <Route path="/factories" element={<FactoryPage />} /> {/* <-- ADD THE NEW ROUTE */}
+                                <Route path="/factories" element={<FactoryPage />} />
                                 <Route path="/restock-requests" element={<RestockRequestPage />} />
                                 <Route path="/purchase-orders" element={<PurchaseOrderListPage />} />
                                 <Route path="/factory-stock" element={<FactoryStockPage />} />
