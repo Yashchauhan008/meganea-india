@@ -23,9 +23,9 @@ export const AuthProvider = ({ children }) => {
     
     // Save the theme preference to localStorage
     localStorage.setItem('theme', theme);
-  }, [theme]); // This effect runs every time the 'theme' state changes
+  }, [theme]);
 
-  // Authentication check on initial load (no changes here)
+  // Authentication check on initial load
   useEffect(() => {
     const token = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
@@ -60,7 +60,6 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // This function will be called by the button in the sidebar
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
   };
@@ -70,10 +69,10 @@ export const AuthProvider = ({ children }) => {
       user,
       isAuthenticated: !!user,
       loading,
-      theme, // Expose the current theme
+      theme,
       login,
       logout,
-      toggleTheme, // Expose the toggle function
+      toggleTheme,
     }),
     [user, loading, theme]
   );

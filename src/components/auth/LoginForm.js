@@ -60,5 +60,4 @@ const LoginForm = () => {
   );
 };
 
-// Use a default export for components that are the main export of their file
 export default LoginForm;

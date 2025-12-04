@@ -38,3 +38,14 @@ export const getPalletDetailsForTile = (factoryId, tileId) => {
 export const updatePalletBoxCount = (palletId, newBoxCount) => {
   return api.put(`/pallets/pallet/${palletId}`, { newBoxCount });
 };
+
+
+/**
+ * Fetches all available pallets in stock for a specific factory.
+ * @param {string} factoryId - The ID of the factory.
+ * @returns {Promise<object>} The server response.
+ */
+export const getAvailablePalletsByFactory = (factoryId) => {
+    return api.get(`/pallets/available-stock/${factoryId}`);
+  };
+  
