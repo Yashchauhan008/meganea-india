@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getAvailablePalletsByFactory } from '../../api/palletApi';
-import { X, Search } from 'lucide-react';
+import { X, Search, Box, Tag, Package } from 'lucide-react';
 
 const PalletSelectionModal = ({
   isOpen,
@@ -8,7 +8,6 @@ const PalletSelectionModal = ({
   onSelect,
   factoryId,
   currentlySelectedPallets = [],
-  containerIndex,
   currentContainerPallets = []
 }) => {
   const [pallets, setPallets] = useState([]);
@@ -19,6 +18,19 @@ const PalletSelectionModal = ({
 
   useEffect(() => {
     if (isOpen && factoryId) {
+      const fetchPallets = async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const { data } = await getAvailablePalletsByFactory(factoryId);
+          setPallets(Array.isArray(data) ? data : []);
+        } catch (err) {
+          setError('Failed to load pallets');
+          setPallets([]);
+        } finally {
+          setLoading(false);
+        }
+      };
       fetchPallets();
     }
   }, [isOpen, factoryId]);
@@ -26,39 +38,19 @@ const PalletSelectionModal = ({
   useEffect(() => {
     if (currentContainerPallets && currentContainerPallets.length > 0) {
       setSelectedPallets(currentContainerPallets.map(p => p._id));
+    } else {
+      setSelectedPallets([]);
     }
-  }, [currentContainerPallets]);
-
-  const fetchPallets = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await getAvailablePalletsByFactory(factoryId);
-      // Handle both array and object responses
-      const palletsArray = Array.isArray(data) ? data : data.data || data.pallets || [];
-      setPallets(palletsArray);
-    } catch (err) {
-      setError('Failed to load pallets');
-      console.error(err);
-      setPallets([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [currentContainerPallets, isOpen]);
 
   const togglePallet = (palletId) => {
-    setSelectedPallets(prev => {
-      if (prev.includes(palletId)) {
-        return prev.filter(id => id !== palletId);
-      } else {
-        return [...prev, palletId];
-      }
-    });
+    setSelectedPallets(prev => 
+      prev.includes(palletId) ? prev.filter(id => id !== palletId) : [...prev, palletId]
+    );
   };
 
   const handleConfirm = () => {
-    const palletsArray = Array.isArray(pallets) ? pallets : [];
-    const selectedPalletObjects = palletsArray.filter(p => selectedPallets.includes(p._id));
+    const selectedPalletObjects = pallets.filter(p => selectedPallets.includes(p._id));
     onSelect(selectedPalletObjects);
   };
 
@@ -66,50 +58,44 @@ const PalletSelectionModal = ({
     return currentlySelectedPallets.includes(palletId) && !selectedPallets.includes(palletId);
   };
 
-  const palletsArray = Array.isArray(pallets) ? pallets : [];
-  const filteredPallets = palletsArray.filter(pallet =>
-    pallet.palletId && pallet.palletId.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredPallets = pallets.filter(pallet =>
+    (pallet.palletId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
+    (pallet.tile?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
   );
 
   if (!isOpen) return null;
 
+  // --- THIS IS THE FIX ---
+  // 1. Increased z-index from z-50 to z-[60] to ensure it's on top.
+  // 2. Darkened the background overlay for better visual separation.
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-slate-800 rounded-lg p-6 max-w-2xl w-full max-h-96 flex flex-col border border-slate-700">
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60] p-4">
+      <div className="bg-foreground dark:bg-dark-foreground rounded-lg p-6 max-w-3xl w-full max-h-[90vh] flex flex-col border border-border dark:border-dark-border">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold">Select Pallets</h2>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white"
-          >
-            <X size={24} />
-          </button>
+          <h2 className="text-2xl font-bold text-text dark:text-dark-text">Select Pallets</h2>
+          <button onClick={onClose} className="text-text-secondary hover:text-text dark:hover:text-dark-text"><X size={24} /></button>
         </div>
 
-        <div className="mb-4 flex items-center gap-2">
-          <Search size={20} className="text-gray-400" />
+        <div className="mb-4 relative">
+          <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary/50" />
           <input
             type="text"
-            placeholder="Search pallets..."
+            placeholder="Search by Pallet ID or Tile Name..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white placeholder-gray-400"
+            className="form-input w-full pl-10"
           />
         </div>
 
-        {error && (
-          <div className="bg-red-900 border border-red-700 text-red-200 px-4 py-2 rounded mb-4">
-            {error}
-          </div>
-        )}
+        {error && <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">{error}</div>}
 
-        <div className="flex-1 overflow-y-auto mb-4">
+        <div className="flex-1 overflow-y-auto mb-4 pr-2">
           {loading ? (
-            <div className="text-center py-8 text-gray-400">Loading pallets...</div>
+            <div className="text-center py-8 text-text-secondary">Loading pallets...</div>
           ) : filteredPallets.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">No pallets available</div>
+            <div className="text-center py-8 text-text-secondary">No pallets available for this factory.</div>
           ) : (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {filteredPallets.map(pallet => {
                 const isSelected = selectedPallets.includes(pallet._id);
                 const isDisabledPallet = isDisabled(pallet._id);
@@ -119,20 +105,27 @@ const PalletSelectionModal = ({
                     key={pallet._id}
                     onClick={() => !isDisabledPallet && togglePallet(pallet._id)}
                     disabled={isDisabledPallet}
-                    className={`p-3 rounded border-2 transition-all ${
+                    className={`p-3 rounded-lg border-2 text-left transition-all ${
                       isSelected
-                        ? 'bg-blue-600 border-blue-500 text-white'
+                        ? 'bg-primary/10 border-primary text-text dark:text-dark-text'
                         : isDisabledPallet
-                        ? 'bg-slate-700 border-slate-600 text-gray-500 opacity-50 cursor-not-allowed'
-                        : 'bg-slate-700 border-slate-600 text-white hover:border-blue-500'
+                        ? 'bg-background/50 border-border text-text-secondary opacity-50 cursor-not-allowed'
+                        : 'bg-background dark:bg-dark-background border-border dark:border-dark-border text-text dark:text-dark-text hover:border-primary/50'
                     }`}
                   >
-                    <div className="font-medium">{pallet.palletId || 'N/A'}</div>
-                    <div className="text-sm text-gray-300">
-                      {pallet.tile?.name || 'N/A'}
+                    <div className="flex justify-between items-start">
+                        <div className="font-mono font-bold text-primary dark:text-dark-primary flex items-center gap-2">
+                            <Tag size={14}/> {pallet.palletId || 'N/A'}
+                        </div>
+                        <div className="font-semibold text-text dark:text-dark-text flex items-center gap-2">
+                            {pallet.boxCount} <Box size={14}/>
+                        </div>
+                    </div>
+                    <div className="text-sm text-text-secondary mt-1 flex items-center gap-2">
+                        <Package size={14}/> {pallet.tile?.name || 'N/A'}
                     </div>
                     {isDisabledPallet && (
-                      <div className="text-xs text-red-400 mt-1">Already assigned</div>
+                      <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1 font-semibold">Assigned to another container</div>
                     )}
                   </button>
                 );
@@ -141,18 +134,9 @@ const PalletSelectionModal = ({
           )}
         </div>
 
-        <div className="flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={selectedPallets.length === 0}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded disabled:opacity-50"
-          >
+        <div className="flex justify-end gap-3 pt-4 border-t border-border dark:border-dark-border">
+          <button onClick={onClose} className="px-6 py-2 rounded-md bg-gray-200 dark:bg-dark-border text-text dark:text-dark-text hover:bg-gray-300 dark:hover:bg-dark-border/50">Cancel</button>
+          <button onClick={handleConfirm} className="px-6 py-2 rounded-md bg-primary text-white hover:bg-primary-hover disabled:opacity-50">
             Confirm ({selectedPallets.length} selected)
           </button>
         </div>

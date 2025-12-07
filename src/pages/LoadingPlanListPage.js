@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { getLoadingPlans } from '../api/loadingPlanApi';
-import LoadingPlanDetailModal from '../components/loading-plans/LoadingPlanDetailModal'; // Import the modal
-import { Loader2, PlusCircle, FileText, Search, Eye } from 'lucide-react';
+import LoadingPlanDetailModal from '../components/loading-plans/LoadingPlanDetailModal';
+import { Loader2, PlusCircle, FileText, Search, Eye, Warehouse, Truck, Package, Calendar } from 'lucide-react';
 import { format } from 'date-fns';
 import useDebounce from '../hooks/useDebounce';
 
@@ -10,27 +10,24 @@ const LoadingPlanListPage = () => {
     const [plans, setPlans] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    
-    // State for modal
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [selectedPlanId, setSelectedPlanId] = useState(null);
-
-    // State for search
     const [searchTerm, setSearchTerm] = useState('');
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
+    const fetchPlans = async () => {
+        setLoading(true);
+        try {
+            const { data } = await getLoadingPlans();
+            setPlans(data);
+        } catch (err) {
+            setError('Failed to fetch loading plans.');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchPlans = async () => {
-            setLoading(true);
-            try {
-                const { data } = await getLoadingPlans();
-                setPlans(data);
-            } catch (err) {
-                setError('Failed to fetch loading plans.');
-            } finally {
-                setLoading(false);
-            }
-        };
         fetchPlans();
     }, []);
 
@@ -38,17 +35,34 @@ const LoadingPlanListPage = () => {
         setSelectedPlanId(planId);
         setIsModalOpen(true);
     };
+    
+    // Add a handler to refresh the list after a delete
+    const handleCloseModalAndRefresh = () => {
+        setIsModalOpen(false);
+        setSelectedPlanId(null);
+        fetchPlans(); // Re-fetch the data
+    };
 
     const filteredPlans = useMemo(() => {
+        if (!plans) return [];
         return plans.filter(plan => 
-            plan.loadingPlanId.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-            plan.factory?.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+            (plan.loadingPlanId?.toLowerCase() || '').includes(debouncedSearchTerm.toLowerCase()) ||
+            (plan.factory?.name?.toLowerCase() || '').includes(debouncedSearchTerm.toLowerCase())
         );
     }, [plans, debouncedSearchTerm]);
 
+    const getStatusInfo = (status) => {
+        switch (status) {
+            case 'Finalized':
+                return { text: 'Finalized', color: 'text-green-600 dark:text-green-400', dot: 'bg-green-500' };
+            default:
+                return { text: 'Unknown', color: 'text-gray-500', dot: 'bg-gray-400' };
+        }
+    };
+
     return (
         <>
-            {isModalOpen && <LoadingPlanDetailModal planId={selectedPlanId} onClose={() => setIsModalOpen(false)} />}
+            {isModalOpen && <LoadingPlanDetailModal planId={selectedPlanId} onClose={handleCloseModalAndRefresh} />}
 
             <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
                 <h1 className="text-3xl font-bold text-text dark:text-dark-text">Loading Plans</h1>
@@ -60,7 +74,7 @@ const LoadingPlanListPage = () => {
                 </Link>
             </div>
 
-            <div className="mb-4">
+            <div className="mb-6">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary/50" size={20} />
                     <input
@@ -73,53 +87,60 @@ const LoadingPlanListPage = () => {
                 </div>
             </div>
 
-            {loading && <div className="text-center p-12"><Loader2 size={48} className="mx-auto animate-spin text-primary" /></div>}
-            {error && <div className="p-6 text-center text-red-500 bg-red-100 rounded-lg">{error}</div>}
-
             {!loading && !error && (
-                <div className="bg-foreground dark:bg-dark-foreground rounded-lg shadow-md border border-border dark:border-dark-border overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-background dark:bg-dark-background text-xs text-text-secondary uppercase">
-                                <tr>
-                                    <th scope="col" className="px-6 py-3">Plan ID</th>
-                                    <th scope="col" className="px-6 py-3">Factory</th>
-                                    <th scope="col" className="px-6 py-3">Date</th>
-                                    <th scope="col" className="px-6 py-3">Containers</th>
-                                    <th scope="col" className="px-6 py-3">Status</th>
-                                    <th scope="col" className="px-6 py-3"><span className="sr-only">Actions</span></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredPlans.length === 0 ? (
-                                    <tr>
-                                        <td colSpan="6" className="text-center py-16">
-                                            <FileText size={48} className="mx-auto text-text-secondary/50" />
-                                            <h3 className="mt-4 text-lg font-semibold">No Loading Plans Found</h3>
-                                            <p className="text-text-secondary mt-1 text-sm">Your search returned no results.</p>
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    filteredPlans.map(plan => (
-                                        <tr key={plan._id} className="border-b border-border dark:border-dark-border hover:bg-background/50 dark:hover:bg-dark-background/50">
-                                            <td className="px-6 py-4 font-mono font-bold text-primary">{plan.loadingPlanId}</td>
-                                            <td className="px-6 py-4 text-text dark:text-dark-text">{plan.factory?.name || 'N/A'}</td>
-                                            <td className="px-6 py-4 text-text-secondary">{format(new Date(plan.createdAt), 'dd MMM, yyyy')}</td>
-                                            <td className="px-6 py-4 font-medium text-text dark:text-dark-text">{plan.containers?.length || 0}</td>
-                                            <td className="px-6 py-4">
-                                                <span className="px-2 py-1 text-xs font-semibold text-green-800 bg-green-100 rounded-full">{plan.status}</span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <button onClick={() => handleViewDetails(plan._id)} className="p-2 rounded-md hover:bg-primary/10 text-primary">
-                                                    <Eye size={18} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {filteredPlans.map(plan => {
+                        const statusInfo = getStatusInfo(plan.status);
+                        const totalPallets = plan.containers?.reduce((sum, container) => sum + (container.pallets?.length || 0), 0) || 0;
+
+                        return (
+                            <div key={plan._id} className="bg-foreground dark:bg-dark-foreground rounded-xl border border-border dark:border-dark-border shadow-sm flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1">
+                                <div className="p-5 border-b border-border dark:border-dark-border">
+                                    <div className="flex justify-between items-start">
+                                        <p className="font-mono text-lg font-bold text-primary dark:text-dark-primary">{plan.loadingPlanId}</p>
+                                        <div className="flex items-center gap-2 text-xs font-semibold">
+                                            <span className={`w-2 h-2 rounded-full ${statusInfo.dot}`}></span>
+                                            <span className={statusInfo.color}>{statusInfo.text}</span>
+                                        </div>
+                                    </div>
+                                    {/* --- UPDATE: Show loadingDate --- */}
+                                    <p className="text-sm text-text-secondary dark:text-dark-text-secondary mt-1 flex items-center gap-1.5">
+                                        <Calendar size={14}/> Loading Date: {plan.loadingDate ? format(new Date(plan.loadingDate), 'dd MMM, yyyy') : 'N/A'}
+                                    </p>
+                                </div>
+                                <div className="p-5 flex-grow">
+                                    <div className="mb-4">
+                                        <div className="text-xs text-text-secondary mb-1">Factory</div>
+                                        <div className="flex items-center gap-2 font-semibold text-text dark:text-dark-text">
+                                            <Warehouse size={16} className="text-text-secondary"/>
+                                            {plan.factory?.name || 'N/A'}
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 text-center">
+                                        <div>
+                                            <div className="text-xs text-text-secondary">Containers</div>
+                                            <div className="flex items-center justify-center gap-2 text-xl font-bold text-text dark:text-dark-text">
+                                                <Truck size={20}/>
+                                                {plan.containers?.length || 0}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div className="text-xs text-text-secondary">Total Pallets</div>
+                                            <div className="flex items-center justify-center gap-2 text-xl font-bold text-text dark:text-dark-text">
+                                                <Package size={20}/>
+                                                {totalPallets}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="p-3 bg-background/50 dark:bg-dark-background/30 border-t border-border dark:border-dark-border">
+                                    <button onClick={() => handleViewDetails(plan._id)} className="w-full flex items-center justify-center gap-2 text-sm font-semibold text-primary dark:text-dark-primary hover:bg-primary/10 dark:hover:bg-dark-primary/10 py-2 rounded-md">
+                                        <Eye size={16} /> View Details
+                                    </button>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
         </>
