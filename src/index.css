@@ -6,7 +6,12 @@
 /* 
   THIS IS THE GLOBAL STYLING LOGIC.
   We are creating custom component classes that automatically handle theming.
+  
 */
+
+@import 'rc-slider/assets/index.css';
+
+
 @layer components {
   .form-input {
     @apply w-full mt-1 px-3 py-2 rounded-md shadow-sm border;

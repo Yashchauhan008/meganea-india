@@ -1,49 +1,41 @@
-// frontend/src/components/purchase-orders/RecordQCModal.js
-
 import React, { useState, useEffect } from 'react';
 import { Loader2, X } from 'lucide-react';
 import { recordQCForItem } from '../../api/purchaseOrderApi';
-import Input from '../ui/Input';
 import Label from '../ui/Label';
+import Input from '../ui/Input'; // We will use the standard input again
+import ThemedSlider from '../ui/Slider'; // The slider component is still useful
 
 const RecordQCModal = ({ poId, item, onClose, onSave }) => {
-    const [formData, setFormData] = useState({
-        quantityChecked: 0,
-        quantityPassed: 0,
-        quantityFailed: 0,
-        notes: '',
-    });
+    // State is now simple and direct
+    const [quantityPassed, setQuantityPassed] = useState(0);
+    const [quantityFailed, setQuantityFailed] = useState(0);
+    const [notes, setNotes] = useState('');
+    
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
-    // Auto-calculate failed quantity whenever checked or passed changes
-    useEffect(() => {
-        const checked = Number(formData.quantityChecked) || 0;
-        const passed = Number(formData.quantityPassed) || 0;
-        if (checked >= passed) {
-            setFormData(prev => ({ ...prev, quantityFailed: checked - passed }));
-        }
-    }, [formData.quantityChecked, formData.quantityPassed]);
-
-    const handleChange = (e) => {
-        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-    };
+    // Auto-calculate the total checked
+    const quantityChecked = Number(quantityPassed) + Number(quantityFailed);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (quantityChecked === 0) {
+            setError('You must record at least one passed or failed item.');
+            return;
+        }
         setError('');
         setLoading(true);
 
         const submissionData = {
-            quantityChecked: Number(formData.quantityChecked),
-            quantityPassed: Number(formData.quantityPassed),
-            quantityFailed: Number(formData.quantityFailed),
-            notes: formData.notes,
+            quantityChecked,
+            quantityPassed,
+            quantityFailed,
+            notes,
         };
 
         try {
-            const updatedPO = await recordQCForItem(poId, item._id, submissionData);
-            onSave(updatedPO.data); // Pass the updated PO back to the parent modal
+            const { data } = await recordQCForItem(poId, item._id, submissionData);
+            onSave(data);
             onClose();
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to save QC record.');
@@ -54,6 +46,31 @@ const RecordQCModal = ({ poId, item, onClose, onSave }) => {
 
     if (!item) return null;
 
+    // The maximum value for the slider is how many boxes are left to be QC'd
+    const remainingToQc = item.totalBoxesOrdered - item.quantityPassedQC;
+
+    // When the slider moves, we must ensure the total doesn't exceed what's remaining
+    const handleSliderChange = (value) => {
+        setQuantityPassed(value);
+        if ((value + Number(quantityFailed)) > remainingToQc) {
+            // If the new "passed" value plus the existing "failed" value is too high,
+            // reduce the "failed" value to stay within the limit.
+            setQuantityFailed(remainingToQc - value);
+        }
+    };
+
+    // When the failed input changes, do the same check
+    const handleFailedChange = (e) => {
+        const failedValue = Number(e.target.value) || 0;
+        if (failedValue < 0) return; // No negative numbers
+
+        if ((quantityPassed + failedValue) > remainingToQc) {
+            setQuantityFailed(remainingToQc - quantityPassed);
+        } else {
+            setQuantityFailed(failedValue);
+        }
+    };
+
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4">
             <div className="bg-foreground dark:bg-dark-foreground rounded-lg shadow-xl p-6 w-full max-w-lg relative">
@@ -61,31 +78,62 @@ const RecordQCModal = ({ poId, item, onClose, onSave }) => {
                     <X size={20} />
                 </button>
                 <h2 className="text-xl font-bold text-text dark:text-dark-text">Record QC for:</h2>
-                <p className="text-primary dark:text-dark-primary font-semibold mb-4">{item.tile.name}</p>
+                <p className="text-primary dark:text-dark-primary font-semibold mb-6">{item.tile.name}</p>
 
                 {error && <p className="text-red-500 bg-red-100 dark:bg-red-900/30 p-3 rounded-md mb-4 text-sm">{error}</p>}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                        <div>
-                            <Label htmlFor="quantityChecked">Checked</Label>
-                            <Input id="quantityChecked" name="quantityChecked" type="number" min="0" value={formData.quantityChecked} onChange={handleChange} required autoFocus />
-                        </div>
-                        <div>
-                            <Label htmlFor="quantityPassed">Passed</Label>
-                            <Input id="quantityPassed" name="quantityPassed" type="number" min="0" max={formData.quantityChecked} value={formData.quantityPassed} onChange={handleChange} required />
-                        </div>
-                        <div>
-                            <Label htmlFor="quantityFailed">Failed</Label>
-                            <Input id="quantityFailed" name="quantityFailed" type="number" value={formData.quantityFailed} readOnly className="bg-gray-200 dark:bg-dark-border cursor-not-allowed" />
-                        </div>
-                    </div>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    
+                    {/* --- THE NEW, SIMPLIFIED UI --- */}
+                    
+                    {/* 1. The Single Slider for Passed Quantity */}
                     <div>
-                        <Label htmlFor="notes">QC Notes</Label>
-                        <textarea id="notes" name="notes" value={formData.notes} onChange={handleChange} rows="3" className="form-input w-full"></textarea>
+                        <div className="flex justify-between items-center mb-2">
+                            <Label htmlFor="quantityPassed">Quantity Passed</Label>
+                            <span className="font-bold text-lg text-green-500">{quantityPassed}</span>
+                        </div>
+                        <ThemedSlider
+                            id="quantityPassed"
+                            min={0}
+                            max={remainingToQc}
+                            value={quantityPassed}
+                            onChange={handleSliderChange}
+                        />
+                        <div className="flex justify-between text-xs text-text-secondary mt-1">
+                            <span>0</span>
+                            <span>{remainingToQc} (Remaining)</span>
+                        </div>
                     </div>
+
+                    {/* 2. The Simple Input for Failed Quantity */}
+                    <div className="grid grid-cols-2 gap-4 items-end">
+                        <div>
+                            <Label htmlFor="quantityFailed">Quantity Failed</Label>
+                            <Input
+                                id="quantityFailed"
+                                type="number"
+                                value={quantityFailed}
+                                onChange={handleFailedChange}
+                                className="text-red-500 font-bold"
+                            />
+                        </div>
+                        
+                        {/* 3. The Auto-Calculated Total */}
+                        <div>
+                            <Label>Total Checked</Label>
+                            <div className="w-full p-2 mt-1 bg-background dark:bg-dark-background rounded-md text-center font-bold text-lg text-text dark:text-dark-text">
+                                {quantityChecked}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <Label htmlFor="notes">QC Notes (Optional)</Label>
+                        <textarea id="notes" name="notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows="3" className="form-input w-full"></textarea>
+                    </div>
+                    
                     <div className="flex justify-end pt-4">
-                        <button type="submit" disabled={loading} className="px-6 py-2 text-sm font-semibold text-white bg-primary rounded-md hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2">
+                        <button type="submit" disabled={loading || quantityChecked === 0} className="px-6 py-2 text-sm font-semibold text-white bg-primary rounded-md hover:bg-primary-hover disabled:opacity-50 flex items-center gap-2">
                             {loading && <Loader2 size={16} className="animate-spin" />}
                             Save QC Record
                         </button>
