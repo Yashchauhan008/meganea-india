@@ -75,6 +75,7 @@ import TileListPage from '../pages/TileListPage';
 import PurchaseOrderListPage from '../pages/PurchaseOrderListPage';
 import LoadingPlanListPage from '../pages/LoadingPlanListPage';
 import CreateLoadingPlanPage from '../pages/CreateLoadingPlanPage';
+import ContainerListPage from '../pages/ContainerListPage';
 
 const AppRoutes = () => {
     const INDIA_ROLES = ['admin', 'india-staff'];
@@ -100,6 +101,8 @@ const AppRoutes = () => {
                                 <Route path="/india-tiles" element={<TileListPage />} />
                                 <Route path="/loading-plans" element={<LoadingPlanListPage />} />
                                 <Route path="/loading-plans/new" element={<CreateLoadingPlanPage />} />
+                                <Route path="/containers" element={<ContainerListPage />} /> 
+
                                 <Route path="*" element={<DashboardPage />} />
                             </Routes>
                         </SidebarLayout>

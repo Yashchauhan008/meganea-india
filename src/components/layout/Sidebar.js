@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import {
-    LayoutDashboard, Inbox,Boxes, ClipboardList, Warehouse, Ship, LogOut, ChevronLeft, Menu, Sun, Moon, Building2 // <-- Add new icon
-  } from 'lucide-react';
+  LayoutDashboard, Inbox, Boxes, ClipboardList, Warehouse, Ship, LogOut, ChevronLeft, Menu, Sun, Moon, Building2, Package // --- 1. IMPORT NEW ICON ---
+} from 'lucide-react';
 
 const getInitials = (name = '') => {
     if (!name) return 'U';
@@ -32,6 +32,7 @@ const Sidebar = () => {
     { to: "/purchase-orders", icon: ClipboardList, text: "Purchase Orders", roles: ['admin', 'india-staff'] },
     { to: "/factory-stock", icon: Warehouse, text: "Factory Stock", roles: ['admin', 'india-staff'] },
     { to: "/loading-plans", icon: Ship, text: "Loading Plans", roles: ['admin', 'india-staff'] },
+    { to: "/containers", icon: Package, text: "All Containers", roles: ['admin', 'india-staff'] }, 
 ];
 
   return (
