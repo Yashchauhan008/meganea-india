@@ -1,148 +1,181 @@
-import React, { useState, useEffect } from 'react';
-import { getAvailablePalletsByFactory } from '../../api/palletApi';
-import { X, Search, Box, Tag, Package } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+// --- THE FIX: Import the correct function ---
+import { getAllAvailablePallets } from '../../api/palletApi';
+import { Loader2, X, Search, CheckSquare, Square, Warehouse, Package } from 'lucide-react';
+import useDebounce from '../../hooks/useDebounce';
 
-const PalletSelectionModal = ({
-  isOpen,
-  onClose,
-  onSelect,
-  factoryId,
-  currentlySelectedPallets = [],
-  currentContainerPallets = []
-}) => {
-  const [pallets, setPallets] = useState([]);
-  const [selectedPallets, setSelectedPallets] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
+const PalletSelectionModal = ({ isOpen, onClose, onSelect, currentContainerPallets = [] }) => {
+    const [allPallets, setAllPallets] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-  useEffect(() => {
-    if (isOpen && factoryId) {
-      const fetchPallets = async () => {
-        setLoading(true);
-        setError('');
-        try {
-          const { data } = await getAvailablePalletsByFactory(factoryId);
-          setPallets(Array.isArray(data) ? data : []);
-        } catch (err) {
-          setError('Failed to load pallets');
-          setPallets([]);
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchPallets();
-    }
-  }, [isOpen, factoryId]);
+    // Initialize the selection state with the pallets already in the container.
+    const [selectedPalletIds, setSelectedPalletIds] = useState(() => new Set(currentContainerPallets.map(p => p._id)));
 
-  useEffect(() => {
-    if (currentContainerPallets && currentContainerPallets.length > 0) {
-      setSelectedPallets(currentContainerPallets.map(p => p._id));
-    } else {
-      setSelectedPallets([]);
-    }
-  }, [currentContainerPallets, isOpen]);
+    useEffect(() => {
+        const fetchPallets = async () => {
+            if (!isOpen) return;
+            setLoading(true);
+            setError('');
+            try {
+                // --- THE FIX: Call the correct, existing API function ---
+                const { data: availableStock } = await getAllAvailablePallets();
+                
+                // Combine the available stock with the pallets already in this container.
+                const combinedPallets = [...availableStock, ...currentContainerPallets];
+                
+                // Remove duplicates using a Map.
+                const uniquePallets = Array.from(new Map(combinedPallets.map(p => [p._id, p])).values());
+                
+                setAllPallets(uniquePallets);
+            } catch (err) {
+                setError('Failed to load available pallets.');
+            } finally {
+                setLoading(false);
+            }
+        };
+        
+        fetchPallets();
+    }, [isOpen]); // Re-fetch when the modal is opened.
 
-  const togglePallet = (palletId) => {
-    setSelectedPallets(prev => 
-      prev.includes(palletId) ? prev.filter(id => id !== palletId) : [...prev, palletId]
-    );
-  };
+    const aggregatedPallets = useMemo(() => {
+        const tileGroups = {};
+        const filteredPallets = allPallets.filter(pallet => 
+            pallet.tile?.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+        );
 
-  const handleConfirm = () => {
-    const selectedPalletObjects = pallets.filter(p => selectedPallets.includes(p._id));
-    onSelect(selectedPalletObjects);
-  };
+        filteredPallets.forEach(pallet => {
+            const tileId = pallet.tile?._id || 'unknown-tile';
+            if (!tileGroups[tileId]) {
+                tileGroups[tileId] = {
+                    tile: pallet.tile || { name: 'Unknown Tile', size: 'N/A' },
+                    factoryGroups: {},
+                };
+            }
 
-  const isDisabled = (palletId) => {
-    return currentlySelectedPallets.includes(palletId) && !selectedPallets.includes(palletId);
-  };
+            const factoryId = pallet.factory?._id || 'unknown-factory';
+            if (!tileGroups[tileId].factoryGroups[factoryId]) {
+                tileGroups[tileId].factoryGroups[factoryId] = {
+                    factory: pallet.factory || { name: 'Unknown Factory' },
+                    pallets: [],
+                };
+            }
+            tileGroups[tileId].factoryGroups[factoryId].pallets.push(pallet);
+        });
 
-  const filteredPallets = pallets.filter(pallet =>
-    (pallet.palletId?.toLowerCase() || '').includes(searchTerm.toLowerCase()) ||
-    (pallet.tile?.name?.toLowerCase() || '').includes(searchTerm.toLowerCase())
-  );
+        return Object.values(tileGroups).map(tg => ({
+            ...tg,
+            factoryGroups: Object.values(tg.factoryGroups),
+        }));
+    }, [allPallets, debouncedSearchTerm]);
 
-  if (!isOpen) return null;
+    const handleTogglePallet = (palletId) => {
+        setSelectedPalletIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(palletId)) {
+                newSet.delete(palletId);
+            } else {
+                newSet.add(palletId);
+            }
+            return newSet;
+        });
+    };
 
-  // --- THIS IS THE FIX ---
-  // 1. Increased z-index from z-50 to z-[60] to ensure it's on top.
-  // 2. Darkened the background overlay for better visual separation.
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[60] p-4">
-      <div className="bg-foreground dark:bg-dark-foreground rounded-lg p-6 max-w-3xl w-full max-h-[90vh] flex flex-col border border-border dark:border-dark-border">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-text dark:text-dark-text">Select Pallets</h2>
-          <button onClick={onClose} className="text-text-secondary hover:text-text dark:hover:text-dark-text"><X size={24} /></button>
-        </div>
+    const handleSelectFactoryGroup = (palletsInGroup, isSelected) => {
+        setSelectedPalletIds(prev => {
+            const newSet = new Set(prev);
+            palletsInGroup.forEach(p => {
+                if (isSelected) {
+                    newSet.add(p._id);
+                } else {
+                    newSet.delete(p._id);
+                }
+            });
+            return newSet;
+        });
+    };
 
-        <div className="mb-4 relative">
-          <Search size={20} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary/50" />
-          <input
-            type="text"
-            placeholder="Search by Pallet ID or Tile Name..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="form-input w-full pl-10"
-          />
-        </div>
+    const handleConfirm = () => {
+        // Find the full pallet objects corresponding to the selected IDs and pass them back.
+        const selectedObjects = allPallets.filter(p => selectedPalletIds.has(p._id));
+        onSelect(selectedObjects);
+    };
 
-        {error && <div className="bg-red-100 text-red-700 px-4 py-2 rounded mb-4">{error}</div>}
+    if (!isOpen) return null;
 
-        <div className="flex-1 overflow-y-auto mb-4 pr-2">
-          {loading ? (
-            <div className="text-center py-8 text-text-secondary">Loading pallets...</div>
-          ) : filteredPallets.length === 0 ? (
-            <div className="text-center py-8 text-text-secondary">No pallets available for this factory.</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {filteredPallets.map(pallet => {
-                const isSelected = selectedPallets.includes(pallet._id);
-                const isDisabledPallet = isDisabled(pallet._id);
+    return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4 animate-fade-in">
+            <div className="bg-foreground dark:bg-dark-foreground rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col">
+                <div className="flex justify-between items-center p-5 border-b border-border dark:border-dark-border">
+                    <h1 className="text-2xl font-bold text-text dark:text-dark-text">Select Pallets</h1>
+                    <button onClick={onClose} className="p-2 rounded-full hover:bg-background dark:hover:bg-dark-background"><X size={24} /></button>
+                </div>
 
-                return (
-                  <button
-                    key={pallet._id}
-                    onClick={() => !isDisabledPallet && togglePallet(pallet._id)}
-                    disabled={isDisabledPallet}
-                    className={`p-3 rounded-lg border-2 text-left transition-all ${
-                      isSelected
-                        ? 'bg-primary/10 border-primary text-text dark:text-dark-text'
-                        : isDisabledPallet
-                        ? 'bg-background/50 border-border text-text-secondary opacity-50 cursor-not-allowed'
-                        : 'bg-background dark:bg-dark-background border-border dark:border-dark-border text-text dark:text-dark-text hover:border-primary/50'
-                    }`}
-                  >
-                    <div className="flex justify-between items-start">
-                        <div className="font-mono font-bold text-primary dark:text-dark-primary flex items-center gap-2">
-                            <Tag size={14}/> {pallet.palletId || 'N/A'}
-                        </div>
-                        <div className="font-semibold text-text dark:text-dark-text flex items-center gap-2">
-                            {pallet.boxCount} <Box size={14}/>
-                        </div>
+                <div className="p-4 border-b border-border dark:border-dark-border">
+                    <div className="relative">
+                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
+                        <input
+                            type="text"
+                            placeholder="Search by tile name..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            className="w-full form-input pl-10"
+                        />
                     </div>
-                    <div className="text-sm text-text-secondary mt-1 flex items-center gap-2">
-                        <Package size={14}/> {pallet.tile?.name || 'N/A'}
-                    </div>
-                    {isDisabledPallet && (
-                      <div className="text-xs text-yellow-600 dark:text-yellow-400 mt-1 font-semibold">Assigned to another container</div>
+                </div>
+
+                <div className="flex-grow overflow-y-auto p-6 space-y-6">
+                    {loading && <div className="flex justify-center items-center h-full"><Loader2 size={32} className="animate-spin text-primary" /></div>}
+                    {error && <div className="text-red-500 text-center">{error}</div>}
+                    {!loading && aggregatedPallets.map((tileGroup, tgIndex) => (
+                        <div key={tgIndex}>
+                            <h2 className="text-xl font-bold text-text dark:text-dark-text">{tileGroup.tile.name}</h2>
+                            <p className="text-sm text-text-secondary mb-3">{tileGroup.tile.size}</p>
+                            {tileGroup.factoryGroups.map((factoryGroup, fgIndex) => {
+                                const allInGroupSelected = factoryGroup.pallets.every(p => selectedPalletIds.has(p._id));
+                                return (
+                                    <div key={fgIndex} className="p-4 border border-border dark:border-dark-border rounded-lg">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="font-semibold text-text dark:text-dark-text flex items-center gap-2"><Warehouse size={16} /> {factoryGroup.factory.name}</h3>
+                                            <button onClick={() => handleSelectFactoryGroup(factoryGroup.pallets, !allInGroupSelected)} className="text-sm font-semibold text-primary hover:underline">
+                                                {allInGroupSelected ? 'Deselect All' : 'Select All'}
+                                            </button>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                            {factoryGroup.pallets.map(pallet => (
+                                                <div key={pallet._id} onClick={() => handleTogglePallet(pallet._id)} className={`p-3 rounded-lg cursor-pointer border-2 ${selectedPalletIds.has(pallet._id) ? 'border-primary bg-primary/10' : 'border-border dark:border-dark-border bg-background dark:bg-dark-background'}`}>
+                                                    <div className="flex justify-between items-center">
+                                                        <p className="font-mono font-semibold text-sm">{pallet.palletId}</p>
+                                                        {selectedPalletIds.has(pallet._id) ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-text-secondary" />}
+                                                    </div>
+                                                    <p className="text-xs text-text-secondary mt-2 flex items-center gap-1"><Package size={12} /> {pallet.boxCount} boxes</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ))}
+                     {!loading && aggregatedPallets.length === 0 && (
+                        <div className="text-center text-text-secondary py-10">
+                            <p>No available pallets match your search.</p>
+                        </div>
                     )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                </div>
 
-        <div className="flex justify-end gap-3 pt-4 border-t border-border dark:border-dark-border">
-          <button onClick={onClose} className="px-6 py-2 rounded-md bg-gray-200 dark:bg-dark-border text-text dark:text-dark-text hover:bg-gray-300 dark:hover:bg-dark-border/50">Cancel</button>
-          <button onClick={handleConfirm} className="px-6 py-2 rounded-md bg-primary text-white hover:bg-primary-hover disabled:opacity-50">
-            Confirm ({selectedPallets.length} selected)
-          </button>
+                <div className="p-4 bg-background/50 dark:bg-dark-background/50 border-t border-border dark:border-dark-border flex justify-between items-center">
+                    <p className="text-sm font-semibold">Total Selected: {selectedPalletIds.size}</p>
+                    <div>
+                        <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-text-secondary rounded-md mr-2">Cancel</button>
+                        <button onClick={handleConfirm} className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-md hover:bg-primary-hover">Confirm Selection</button>
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
-    </div>
-  );
+    );
 };
 
 export default PalletSelectionModal;

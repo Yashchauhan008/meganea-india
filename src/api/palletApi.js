@@ -1,51 +1,33 @@
 import api from './api';
 
-/**
- * Fetches the grouped factory stock data from the backend.
- */
-export const getFactoryStock = () => {
-  return api.get('/pallets/factory-stock');
+// This function likely already exists
+export const getFactoryStock = (factoryId) => {
+  return api.get(`/pallets/factory-stock/${factoryId}`);
 };
 
-/**
- * Manually creates a single pallet.
- */
-export const createManualPallet = (palletData) => {
-  return api.post('/pallets/manual-adjustment', palletData);
+// --- THIS IS THE NEW FUNCTION THE MODAL NEEDS ---
+// It gets all available pallets regardless of factory.
+export const getAllAvailablePallets = () => {
+  return api.get('/pallets/available-stock');
 };
+// --- END OF NEW FUNCTION ---
 
-/**
- * Deletes a single pallet by its ID.
- */
-export const deletePallet = (palletId) => {
-  return api.delete(`/pallets/pallet/${palletId}`);
-};
-
-/**
- * Fetches the detailed list of pallets for a specific tile at a factory.
- */
-export const getPalletDetailsForTile = (factoryId, tileId) => {
-  return api.get(`/pallets/details/${factoryId}/${tileId}`);
-};
-
-// --- THIS IS THE MISSING FUNCTION ---
-/**
- * Updates the box count for a single pallet.
- * @param {string} palletId - The ID of the pallet to update.
- * @param {number} newBoxCount - The new box count.
- * @returns {Promise<object>} The server response.
- */
-export const updatePalletBoxCount = (palletId, newBoxCount) => {
-  return api.put(`/pallets/pallet/${palletId}`, { newBoxCount });
-};
-
-
-/**
- * Fetches all available pallets in stock for a specific factory.
- * @param {string} factoryId - The ID of the factory.
- * @returns {Promise<object>} The server response.
- */
 export const getAvailablePalletsByFactory = (factoryId) => {
-    return api.get(`/pallets/available-stock/${factoryId}`);
-  };
-  
+  return api.get(`/pallets/available/${factoryId}`);
+};
+
+export const getPalletDetailsForTile = (tileId) => {
+  return api.get(`/pallets/details-for-tile/${tileId}`);
+};
+
+export const createManualPallet = (palletData) => {
+  return api.post('/pallets/manual', palletData);
+};
+
+export const updatePalletBoxCount = (palletId, boxCount) => {
+  return api.patch(`/pallets/${palletId}/box-count`, { boxCount });
+};
+
+export const deletePallet = (palletId) => {
+  return api.delete(`/pallets/${palletId}`);
+};
