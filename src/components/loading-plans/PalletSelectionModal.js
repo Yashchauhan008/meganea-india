@@ -1,17 +1,31 @@
 import React, { useState, useEffect, useMemo } from 'react';
-// --- THE FIX: Import the correct function ---
 import { getAllAvailablePallets } from '../../api/palletApi';
-import { Loader2, X, Search, CheckSquare, Square, Warehouse, Package } from 'lucide-react';
+import { Loader2, X, Search, CheckSquare, Square, Warehouse, Package, ChevronDown, ChevronRight, Box } from 'lucide-react';
 import useDebounce from '../../hooks/useDebounce';
+
+// PalletCard component for individual pallet selection
+const PalletCard = ({ pallet, isSelected, onToggle }) => (
+    <div 
+        onClick={() => onToggle(pallet._id)} 
+        className={`p-3 rounded-lg cursor-pointer border-2 transition-colors ${isSelected ? 'border-primary bg-primary/10' : 'border-border dark:border-dark-border bg-background dark:bg-dark-background hover:border-gray-400'}`}
+    >
+        <div className="flex justify-between items-center">
+            {/* FIX: Ensure text is white in dark mode */}
+            <p className="font-mono font-semibold text-sm text-text dark:text-dark-text">{pallet.palletId}</p>
+            {isSelected ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-text-secondary" />}
+        </div>
+        <p className="text-xs text-text-secondary mt-2 flex items-center gap-1"><Package size={12} /> {pallet.boxCount} boxes</p>
+    </div>
+);
 
 const PalletSelectionModal = ({ isOpen, onClose, onSelect, currentContainerPallets = [] }) => {
     const [allPallets, setAllPallets] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [openGroups, setOpenGroups] = useState({});
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-    // Initialize the selection state with the pallets already in the container.
     const [selectedPalletIds, setSelectedPalletIds] = useState(() => new Set(currentContainerPallets.map(p => p._id)));
 
     useEffect(() => {
@@ -20,15 +34,9 @@ const PalletSelectionModal = ({ isOpen, onClose, onSelect, currentContainerPalle
             setLoading(true);
             setError('');
             try {
-                // --- THE FIX: Call the correct, existing API function ---
                 const { data: availableStock } = await getAllAvailablePallets();
-                
-                // Combine the available stock with the pallets already in this container.
                 const combinedPallets = [...availableStock, ...currentContainerPallets];
-                
-                // Remove duplicates using a Map.
                 const uniquePallets = Array.from(new Map(combinedPallets.map(p => [p._id, p])).values());
-                
                 setAllPallets(uniquePallets);
             } catch (err) {
                 setError('Failed to load available pallets.');
@@ -36,69 +44,76 @@ const PalletSelectionModal = ({ isOpen, onClose, onSelect, currentContainerPalle
                 setLoading(false);
             }
         };
-        
         fetchPallets();
-    }, [isOpen]); // Re-fetch when the modal is opened.
+    }, [isOpen]);
 
-    const aggregatedPallets = useMemo(() => {
-        const tileGroups = {};
-        const filteredPallets = allPallets.filter(pallet => 
-            pallet.tile?.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
+    const aggregatedData = useMemo(() => {
+        const factoryGroups = {};
+        const filteredPallets = allPallets.filter(p => 
+            p.tile?.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
         );
 
         filteredPallets.forEach(pallet => {
-            const tileId = pallet.tile?._id || 'unknown-tile';
-            if (!tileGroups[tileId]) {
-                tileGroups[tileId] = {
-                    tile: pallet.tile || { name: 'Unknown Tile', size: 'N/A' },
-                    factoryGroups: {},
+            const factoryId = pallet.factory?._id || 'unknown-factory';
+            if (!factoryGroups[factoryId]) {
+                factoryGroups[factoryId] = {
+                    factory: pallet.factory || { name: 'Unknown Factory' },
+                    tileGroups: {},
                 };
             }
 
-            const factoryId = pallet.factory?._id || 'unknown-factory';
-            if (!tileGroups[tileId].factoryGroups[factoryId]) {
-                tileGroups[tileId].factoryGroups[factoryId] = {
-                    factory: pallet.factory || { name: 'Unknown Factory' },
+            const tileId = pallet.tile?._id || 'unknown-tile';
+            if (!factoryGroups[factoryId].tileGroups[tileId]) {
+                factoryGroups[factoryId].tileGroups[tileId] = {
+                    tile: pallet.tile || { name: 'Unknown Tile', size: 'N/A' },
+                    boxCountGroups: {},
+                };
+            }
+
+            const boxCount = pallet.boxCount || 0;
+            if (!factoryGroups[factoryId].tileGroups[tileId].boxCountGroups[boxCount]) {
+                factoryGroups[factoryId].tileGroups[tileId].boxCountGroups[boxCount] = {
+                    boxCount: boxCount,
                     pallets: [],
                 };
             }
-            tileGroups[tileId].factoryGroups[factoryId].pallets.push(pallet);
+            factoryGroups[factoryId].tileGroups[tileId].boxCountGroups[boxCount].pallets.push(pallet);
         });
 
-        return Object.values(tileGroups).map(tg => ({
-            ...tg,
-            factoryGroups: Object.values(tg.factoryGroups),
+        return Object.values(factoryGroups).map(fg => ({
+            ...fg,
+            tileGroups: Object.values(fg.tileGroups).map(tg => ({
+                ...tg,
+                boxCountGroups: Object.values(tg.boxCountGroups),
+            })),
         }));
     }, [allPallets, debouncedSearchTerm]);
+
+    const handleToggleGroup = (key) => {
+        setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
+    };
 
     const handleTogglePallet = (palletId) => {
         setSelectedPalletIds(prev => {
             const newSet = new Set(prev);
-            if (newSet.has(palletId)) {
-                newSet.delete(palletId);
-            } else {
-                newSet.add(palletId);
-            }
+            if (newSet.has(palletId)) newSet.delete(palletId);
+            else newSet.add(palletId);
             return newSet;
         });
     };
 
-    const handleSelectFactoryGroup = (palletsInGroup, isSelected) => {
+    const handleSelectSubgroup = (palletsInGroup, shouldSelect) => {
         setSelectedPalletIds(prev => {
             const newSet = new Set(prev);
             palletsInGroup.forEach(p => {
-                if (isSelected) {
-                    newSet.add(p._id);
-                } else {
-                    newSet.delete(p._id);
-                }
+                if (shouldSelect) newSet.add(p._id);
+                else newSet.delete(p._id);
             });
             return newSet;
         });
     };
 
     const handleConfirm = () => {
-        // Find the full pallet objects corresponding to the selected IDs and pass them back.
         const selectedObjects = allPallets.filter(p => selectedPalletIds.has(p._id));
         onSelect(selectedObjects);
     };
@@ -107,7 +122,7 @@ const PalletSelectionModal = ({ isOpen, onClose, onSelect, currentContainerPalle
 
     return (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] p-4 animate-fade-in">
-            <div className="bg-foreground dark:bg-dark-foreground rounded-xl shadow-2xl w-full max-w-4xl h-[90vh] flex flex-col">
+            <div className="bg-foreground dark:bg-dark-foreground rounded-xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col">
                 <div className="flex justify-between items-center p-5 border-b border-border dark:border-dark-border">
                     <h1 className="text-2xl font-bold text-text dark:text-dark-text">Select Pallets</h1>
                     <button onClick={onClose} className="p-2 rounded-full hover:bg-background dark:hover:bg-dark-background"><X size={24} /></button>
@@ -126,48 +141,72 @@ const PalletSelectionModal = ({ isOpen, onClose, onSelect, currentContainerPalle
                     </div>
                 </div>
 
-                <div className="flex-grow overflow-y-auto p-6 space-y-6">
+                <div className="flex-grow overflow-y-auto p-6 space-y-4">
                     {loading && <div className="flex justify-center items-center h-full"><Loader2 size={32} className="animate-spin text-primary" /></div>}
                     {error && <div className="text-red-500 text-center">{error}</div>}
-                    {!loading && aggregatedPallets.map((tileGroup, tgIndex) => (
-                        <div key={tgIndex}>
-                            <h2 className="text-xl font-bold text-text dark:text-dark-text">{tileGroup.tile.name}</h2>
-                            <p className="text-sm text-text-secondary mb-3">{tileGroup.tile.size}</p>
-                            {tileGroup.factoryGroups.map((factoryGroup, fgIndex) => {
-                                const allInGroupSelected = factoryGroup.pallets.every(p => selectedPalletIds.has(p._id));
-                                return (
-                                    <div key={fgIndex} className="p-4 border border-border dark:border-dark-border rounded-lg">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <h3 className="font-semibold text-text dark:text-dark-text flex items-center gap-2"><Warehouse size={16} /> {factoryGroup.factory.name}</h3>
-                                            <button onClick={() => handleSelectFactoryGroup(factoryGroup.pallets, !allInGroupSelected)} className="text-sm font-semibold text-primary hover:underline">
-                                                {allInGroupSelected ? 'Deselect All' : 'Select All'}
-                                            </button>
+                    
+                    {!loading && aggregatedData.map((factoryGroup) => (
+                        <div key={factoryGroup.factory._id} className="bg-background dark:bg-dark-background/50 rounded-lg">
+                            {/* FIX: Ensure factory name is white in dark mode */}
+                            <h2 className="text-lg font-bold text-text dark:text-dark-text p-4 flex items-center gap-2"><Warehouse size={20} /> {factoryGroup.factory.name}</h2>
+                            <div className="space-y-2 p-4 pt-0">
+                                {factoryGroup.tileGroups.map((tileGroup) => (
+                                    <div key={tileGroup.tile._id} className="border border-border dark:border-dark-border rounded-md">
+                                        <div className="p-3">
+                                            {/* Tile name is already blue (text-primary), which is fine */}
+                                            <h3 className="font-semibold text-md text-primary">{tileGroup.tile.name}</h3>
+                                            <p className="text-xs text-text-secondary">{tileGroup.tile.size}</p>
                                         </div>
-                                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                            {factoryGroup.pallets.map(pallet => (
-                                                <div key={pallet._id} onClick={() => handleTogglePallet(pallet._id)} className={`p-3 rounded-lg cursor-pointer border-2 ${selectedPalletIds.has(pallet._id) ? 'border-primary bg-primary/10' : 'border-border dark:border-dark-border bg-background dark:bg-dark-background'}`}>
-                                                    <div className="flex justify-between items-center">
-                                                        <p className="font-mono font-semibold text-sm">{pallet.palletId}</p>
-                                                        {selectedPalletIds.has(pallet._id) ? <CheckSquare size={18} className="text-primary" /> : <Square size={18} className="text-text-secondary" />}
+                                        {tileGroup.boxCountGroups.map((boxGroup) => {
+                                            const groupKey = `${tileGroup.tile._id}-${boxGroup.boxCount}`;
+                                            const isExpanded = openGroups[groupKey];
+                                            const allInSubgroupSelected = boxGroup.pallets.every(p => selectedPalletIds.has(p._id));
+                                            return (
+                                                <div key={groupKey} className="border-t border-border dark:border-dark-border">
+                                                    <div className="flex justify-between items-center p-3 cursor-pointer hover:bg-black/5 dark:hover:bg-white/5" onClick={() => handleToggleGroup(groupKey)}>
+                                                        <div className="flex items-center gap-3">
+                                                            {isExpanded ? <ChevronDown size={16} className="text-text-secondary" /> : <ChevronRight size={16} className="text-text-secondary" />}
+                                                            {/* FIX: Ensure this descriptive text is white in dark mode */}
+                                                            <div className="flex items-center gap-2 text-text dark:text-dark-text">
+                                                                <Box size={16} className="text-text-secondary"/>
+                                                                <span className="font-medium">{boxGroup.pallets.length} Pallets</span>
+                                                                <span className="text-text-secondary">with {boxGroup.boxCount} boxes each</span>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleSelectSubgroup(boxGroup.pallets, !allInSubgroupSelected);
+                                                            }} 
+                                                            className="text-xs font-semibold text-primary hover:underline"
+                                                        >
+                                                            {allInSubgroupSelected ? 'Deselect All' : 'Select All'}
+                                                        </button>
                                                     </div>
-                                                    <p className="text-xs text-text-secondary mt-2 flex items-center gap-1"><Package size={12} /> {pallet.boxCount} boxes</p>
+                                                    {isExpanded && (
+                                                        <div className="p-4 bg-background dark:bg-dark-background border-t border-dashed border-border dark:border-dark-border grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                                            {boxGroup.pallets.map(pallet => (
+                                                                <PalletCard key={pallet._id} pallet={pallet} isSelected={selectedPalletIds.has(pallet._id)} onToggle={handleTogglePallet} />
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
-                                            ))}
-                                        </div>
+                                            );
+                                        })}
                                     </div>
-                                );
-                            })}
+                                ))}
+                            </div>
                         </div>
                     ))}
-                     {!loading && aggregatedPallets.length === 0 && (
+                    {!loading && aggregatedData.length === 0 && (
                         <div className="text-center text-text-secondary py-10">
-                            <p>No available pallets match your search.</p>
+                            <p>No available pallets found.</p>
                         </div>
                     )}
                 </div>
 
                 <div className="p-4 bg-background/50 dark:bg-dark-background/50 border-t border-border dark:border-dark-border flex justify-between items-center">
-                    <p className="text-sm font-semibold">Total Selected: {selectedPalletIds.size}</p>
+                    <p className="text-sm font-semibold text-text dark:text-dark-text">Total Selected: {selectedPalletIds.size}</p>
                     <div>
                         <button onClick={onClose} className="px-4 py-2 text-sm font-semibold text-text-secondary rounded-md mr-2">Cancel</button>
                         <button onClick={handleConfirm} className="px-4 py-2 text-sm font-semibold text-white bg-primary rounded-md hover:bg-primary-hover">Confirm Selection</button>
