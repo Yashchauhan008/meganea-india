@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { updatePalletBoxCount, deletePallet } from '../api/palletApi';
+import { updatePalletBoxCount, deletePallet } from '../../api/palletApi';
 import { Loader2, X, AlertCircle, Trash2, Info } from 'lucide-react';
 
 const EditPalletModal = ({ pallet, tile, onClose, onSuccess }) => {

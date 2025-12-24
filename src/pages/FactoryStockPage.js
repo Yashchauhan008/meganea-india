@@ -3,8 +3,8 @@ import { getAllFactories } from '../api/factoryApi';
 import { getAllFactoryStock, getFactoryStock, getFactoryStockSummary } from '../api/palletApi';
 import { Loader2, Warehouse, Box, Layers, Ruler, Package, Grid, List, Search, AlertCircle, Boxes, Plus, Edit2 } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
-import CreateCustomPalletModal from '../components/CreateCustomPalletModal';
-import EditPalletModal from '../components/EditPalletModal';
+import CreateCustomPalletModal from '../components/pallets/CreateCustomPalletModal';
+import EditPalletModal from '../components/pallets/EditPalletModal';
 
 const FactoryStockPage = () => {
     // State management

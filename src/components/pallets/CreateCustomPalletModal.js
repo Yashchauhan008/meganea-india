@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createManualPallet } from '../api/palletApi';
+import { createManualPallet } from '../../api/palletApi';
 import { Loader2, X, Info, AlertCircle } from 'lucide-react';
 
 const CreateCustomPalletModal = ({ factory, tiles, onClose, onSuccess }) => {
