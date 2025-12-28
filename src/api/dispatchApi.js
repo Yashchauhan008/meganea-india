@@ -1,6 +1,10 @@
+// frontend/src/api/dispatchApi.js
+
 import api from './api.js';
 
-// Get all containers available for dispatch
+/**
+ * Get all containers available for dispatch
+ */
 export const getAvailableContainers = async () => {
   try {
     const response = await api.get('/dispatches/containers/available');
@@ -10,7 +14,9 @@ export const getAvailableContainers = async () => {
   }
 };
 
-// Create new dispatch order
+/**
+ * Create new dispatch order
+ */
 export const createDispatch = async (dispatchData) => {
   try {
     const response = await api.post('/dispatches', dispatchData);
@@ -20,19 +26,22 @@ export const createDispatch = async (dispatchData) => {
   }
 };
 
-// Get all dispatch orders
+/**
+ * Get all dispatch orders with optional filters
+ */
 export const getAllDispatches = async (filters = {}) => {
   try {
     const params = new URLSearchParams();
-    
+
     if (filters.status) params.append('status', filters.status);
     if (filters.factoryId) params.append('factoryId', filters.factoryId);
     if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
     if (filters.dateTo) params.append('dateTo', filters.dateTo);
+    if (filters.search) params.append('search', filters.search);
 
     const queryString = params.toString();
     const url = queryString ? `/dispatches?${queryString}` : '/dispatches';
-    
+
     const response = await api.get(url);
     return response.data;
   } catch (error) {
@@ -40,7 +49,9 @@ export const getAllDispatches = async (filters = {}) => {
   }
 };
 
-// Get single dispatch order
+/**
+ * Get single dispatch order by ID
+ */
 export const getDispatchById = async (id) => {
   try {
     const response = await api.get(`/dispatches/${id}`);
@@ -50,21 +61,25 @@ export const getDispatchById = async (id) => {
   }
 };
 
-// Update dispatch order (add/remove containers)
-export const updateDispatch = async (id, updateData) => {
+/**
+ * Update dispatch order (add/remove containers, edit details)
+ */
+export const updateDispatch = async (id, data) => {
   try {
-    const response = await api.put(`/dispatches/${id}`, updateData);
+    const response = await api.put(`/dispatches/${id}`, data);
     return response.data;
   } catch (error) {
     throw error.response?.data?.message || 'Failed to update dispatch order';
   }
 };
 
-// Update dispatch status
-export const updateDispatchStatus = async (id, newStatus, notes = '') => {
+/**
+ * Update dispatch status
+ */
+export const updateDispatchStatus = async (id, status, notes = '') => {
   try {
     const response = await api.patch(`/dispatches/${id}/status`, {
-      newStatus,
+      status,
       notes,
     });
     return response.data;
@@ -73,11 +88,13 @@ export const updateDispatchStatus = async (id, newStatus, notes = '') => {
   }
 };
 
-// Delete dispatch order
-export const deleteDispatch = async (id, reason = '') => {
+/**
+ * Delete dispatch order (soft delete)
+ */
+export const deleteDispatch = async (id, deletionReason) => {
   try {
     const response = await api.delete(`/dispatches/${id}`, {
-      data: { reason },
+      data: { deletionReason },
     });
     return response.data;
   } catch (error) {
@@ -85,26 +102,14 @@ export const deleteDispatch = async (id, reason = '') => {
   }
 };
 
-// Add containers to dispatch
-export const addContainersToDispatch = async (dispatchId, containerIds) => {
+/**
+ * Get dispatch statistics
+ */
+export const getDispatchStats = async () => {
   try {
-    const response = await api.put(`/dispatches/${dispatchId}`, {
-      containerIdsToAdd: containerIds,
-    });
+    const response = await api.get('/dispatches/stats');
     return response.data;
   } catch (error) {
-    throw error.response?.data?.message || 'Failed to add containers to dispatch';
-  }
-};
-
-// Remove containers from dispatch
-export const removeContainersFromDispatch = async (dispatchId, containerIds) => {
-  try {
-    const response = await api.put(`/dispatches/${dispatchId}`, {
-      containerIdsToRemove: containerIds,
-    });
-    return response.data;
-  } catch (error) {
-    throw error.response?.data?.message || 'Failed to remove containers from dispatch';
+    throw error.response?.data?.message || 'Failed to fetch dispatch statistics';
   }
 };

@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { getAllFactories } from '../api/factoryApi';
 import { getAllFactoryStock, getFactoryStock, getFactoryStockSummary } from '../api/palletApi';
-import { Loader2, Warehouse, Box, Layers, Ruler, Package, Grid, List, Search, AlertCircle, Boxes, Plus, Edit2 } from 'lucide-react';
+import { Loader2, Warehouse, Box, Layers, Ruler, Package, Grid, List, Search, AlertCircle, Boxes, Plus, Edit2, RefreshCw } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
 import CreateCustomPalletModal from '../components/pallets/CreateCustomPalletModal';
 import EditPalletModal from '../components/pallets/EditPalletModal';
@@ -14,7 +14,8 @@ const FactoryStockPage = () => {
     const [allFactoryStock, setAllFactoryStock] = useState([]);
     const [selectedFactoryStock, setSelectedFactoryStock] = useState([]);
     const [selectedFactorySummary, setSelectedFactorySummary] = useState(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true); // Start with loading true
+    const [initialLoading, setInitialLoading] = useState(true);
     const [error, setError] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [viewMode, setViewMode] = useState('summary'); // 'summary' or 'detail'
@@ -22,66 +23,50 @@ const FactoryStockPage = () => {
     const [editingPallet, setEditingPallet] = useState(null);
     const debouncedSearchTerm = useDebounce(searchTerm, 300);
 
-    // Fetch factories and tiles on mount
+    // Fetch factories and all stock on mount
     useEffect(() => {
-        const fetchFactoriesAndTiles = async () => {
+        const fetchInitialData = async () => {
+            setInitialLoading(true);
+            setError('');
             try {
-                const { data: factoriesData } = await getAllFactories();
+                // Fetch factories
+                const factoriesResponse = await getAllFactories();
+                const factoriesData = factoriesResponse.data || factoriesResponse || [];
                 setFactories(factoriesData);
+                
                 if (factoriesData.length > 0) {
                     setSelectedFactory(factoriesData[0]._id);
                 }
 
-                // Extract unique tiles from all stock
-                const { data: stockData } = await getAllFactoryStock();
+                // Fetch all factory stock
+                const stockResponse = await getAllFactoryStock();
+                const stockData = stockResponse.data || stockResponse || [];
+                setAllFactoryStock(stockData);
+                
+                // Extract unique tiles from stock
                 const uniqueTiles = {};
                 stockData.forEach(item => {
-                    if (item.tile && !uniqueTiles[item.tile._id]) {
+                    if (item.tile && item.tile._id && !uniqueTiles[item.tile._id]) {
                         uniqueTiles[item.tile._id] = item.tile;
                     }
                 });
                 setTiles(Object.values(uniqueTiles));
-            } catch (err) {
-                setError('Failed to fetch factories and tiles.');
-                console.error(err);
-            }
-        };
-        fetchFactoriesAndTiles();
-    }, []);
-
-    // Fetch all factory stock for summary view
-    useEffect(() => {
-        const fetchAllStock = async () => {
-            try {
-                const { data } = await getAllFactoryStock();
-                setAllFactoryStock(data);
                 
-                // Update tiles if new ones are found
-                const uniqueTiles = {};
-                data.forEach(item => {
-                    if (item.tile && !uniqueTiles[item.tile._id]) {
-                        uniqueTiles[item.tile._id] = item.tile;
-                    }
-                });
-                setTiles(prev => {
-                    const updated = { ...prev };
-                    Object.values(uniqueTiles).forEach(tile => {
-                        updated[tile._id] = tile;
-                    });
-                    return Object.values(updated);
-                });
             } catch (err) {
-                console.error('Failed to fetch all factory stock:', err);
+                console.error('Failed to fetch initial data:', err);
+                setError('Failed to fetch factories and stock data. Please refresh the page.');
+            } finally {
+                setInitialLoading(false);
+                setLoading(false);
             }
         };
-        fetchAllStock();
+        
+        fetchInitialData();
     }, []);
 
-    // Fetch stock for selected factory
+    // Fetch stock for selected factory (detail view)
     useEffect(() => {
-        if (!selectedFactory) {
-            setSelectedFactoryStock([]);
-            setSelectedFactorySummary(null);
+        if (!selectedFactory || viewMode !== 'detail') {
             return;
         }
 
@@ -89,26 +74,30 @@ const FactoryStockPage = () => {
             setLoading(true);
             setError('');
             try {
-                const { data: stockData } = await getFactoryStock(selectedFactory);
+                const stockResponse = await getFactoryStock(selectedFactory);
+                const stockData = stockResponse.data || stockResponse || [];
                 setSelectedFactoryStock(stockData);
 
-                const { data: summaryData } = await getFactoryStockSummary(selectedFactory);
+                const summaryResponse = await getFactoryStockSummary(selectedFactory);
+                const summaryData = summaryResponse.data || summaryResponse || null;
                 setSelectedFactorySummary(summaryData);
             } catch (err) {
+                console.error('Failed to fetch factory stock:', err);
                 setError('Failed to fetch stock for the selected factory.');
                 setSelectedFactoryStock([]);
                 setSelectedFactorySummary(null);
-                console.error(err);
             } finally {
                 setLoading(false);
             }
         };
 
         fetchFactoryData();
-    }, [selectedFactory]);
+    }, [selectedFactory, viewMode]);
 
     // Aggregate data for summary view
     const aggregatedAllStock = useMemo(() => {
+        if (!allFactoryStock || allFactoryStock.length === 0) return [];
+        
         const filtered = allFactoryStock.filter(pallet =>
             (pallet.tile?.name?.toLowerCase() || '').includes(debouncedSearchTerm.toLowerCase()) ||
             (pallet.factory?.name?.toLowerCase() || '').includes(debouncedSearchTerm.toLowerCase())
@@ -142,14 +131,14 @@ const FactoryStockPage = () => {
 
             if (itemType === 'Pallet') {
                 factoryGroups[factoryId].tiles[tileId].pallets.count += 1;
-                factoryGroups[factoryId].tiles[tileId].pallets.totalBoxes += pallet.boxCount;
+                factoryGroups[factoryId].tiles[tileId].pallets.totalBoxes += pallet.boxCount || 0;
                 factoryGroups[factoryId].totalPalletCount += 1;
-                factoryGroups[factoryId].totalPalletBoxes += pallet.boxCount;
+                factoryGroups[factoryId].totalPalletBoxes += pallet.boxCount || 0;
             } else if (itemType === 'Khatli') {
                 factoryGroups[factoryId].tiles[tileId].khatlis.count += 1;
-                factoryGroups[factoryId].tiles[tileId].khatlis.totalBoxes += pallet.boxCount;
+                factoryGroups[factoryId].tiles[tileId].khatlis.totalBoxes += pallet.boxCount || 0;
                 factoryGroups[factoryId].totalKhatliCount += 1;
-                factoryGroups[factoryId].totalKhatliBoxes += pallet.boxCount;
+                factoryGroups[factoryId].totalKhatliBoxes += pallet.boxCount || 0;
             }
         });
 
@@ -158,6 +147,10 @@ const FactoryStockPage = () => {
 
     // Aggregate data for detail view
     const aggregatedSelectedFactory = useMemo(() => {
+        if (!selectedFactoryStock || selectedFactoryStock.length === 0) {
+            return { pallets: [], khatlis: [] };
+        }
+        
         const filtered = selectedFactoryStock.filter(pallet =>
             (pallet.tile?.name?.toLowerCase() || '').includes(debouncedSearchTerm.toLowerCase())
         );
@@ -216,23 +209,42 @@ const FactoryStockPage = () => {
 
     const selectedFactoryName = factories.find(f => f._id === selectedFactory)?.name || 'Select Factory';
 
-    const handleRefresh = async () => {
+    const handleRefresh = useCallback(async () => {
         setLoading(true);
+        setError('');
         try {
-            const { data: stockData } = await getFactoryStock(selectedFactory);
-            setSelectedFactoryStock(stockData);
-
-            const { data: summaryData } = await getFactoryStockSummary(selectedFactory);
-            setSelectedFactorySummary(summaryData);
-
-            const { data: allData } = await getAllFactoryStock();
+            // Refresh all stock
+            const allStockResponse = await getAllFactoryStock();
+            const allData = allStockResponse.data || allStockResponse || [];
             setAllFactoryStock(allData);
+
+            // If in detail view, also refresh selected factory
+            if (viewMode === 'detail' && selectedFactory) {
+                const stockResponse = await getFactoryStock(selectedFactory);
+                const stockData = stockResponse.data || stockResponse || [];
+                setSelectedFactoryStock(stockData);
+
+                const summaryResponse = await getFactoryStockSummary(selectedFactory);
+                const summaryData = summaryResponse.data || summaryResponse || null;
+                setSelectedFactorySummary(summaryData);
+            }
         } catch (err) {
             console.error('Failed to refresh:', err);
+            setError('Failed to refresh stock data.');
         } finally {
             setLoading(false);
         }
-    };
+    }, [selectedFactory, viewMode]);
+
+    // Initial loading screen
+    if (initialLoading) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh]">
+                <Loader2 size={48} className="animate-spin text-primary mb-4" />
+                <p className="text-text-secondary dark:text-dark-text-secondary">Loading factory stock...</p>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -242,6 +254,14 @@ const FactoryStockPage = () => {
                     <h1 className="text-3xl font-bold text-text dark:text-dark-text">Factory Stock</h1>
                     <p className="text-text-secondary dark:text-dark-text-secondary">Live inventory of QC-passed goods (Pallets & Khatlis).</p>
                 </div>
+                <button
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    className="flex items-center gap-2 px-4 py-2 bg-foreground dark:bg-dark-foreground border border-border dark:border-dark-border rounded-lg hover:bg-gray-100 dark:hover:bg-dark-border transition-colors disabled:opacity-50"
+                >
+                    <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                    Refresh
+                </button>
             </div>
 
             {/* View Mode Toggle and Controls */}
@@ -329,12 +349,15 @@ const FactoryStockPage = () => {
                     ) : aggregatedAllStock.length === 0 ? (
                         <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-border dark:border-dark-border p-12 text-center">
                             <Warehouse size={48} className="mx-auto text-text-secondary mb-4 opacity-50" />
-                            <p className="text-text-secondary dark:text-dark-text-secondary">No stock found across all factories.</p>
+                            <p className="text-text-secondary dark:text-dark-text-secondary mb-2">No stock found across all factories.</p>
+                            <p className="text-sm text-text-secondary/70 dark:text-dark-text-secondary/70">
+                                Stock is added when Purchase Orders pass QC inspection, or you can add custom pallets in Detail View.
+                            </p>
                         </div>
                     ) : (
                         aggregatedAllStock.map(factoryGroup => (
                             <div
-                                key={factoryGroup.factory?._id}
+                                key={factoryGroup.factory?._id || 'unknown'}
                                 className="bg-foreground dark:bg-dark-foreground rounded-xl border border-border dark:border-dark-border shadow-sm overflow-hidden hover:shadow-md transition-shadow"
                             >
                                 {/* Factory Header */}
@@ -345,8 +368,8 @@ const FactoryStockPage = () => {
                                                 <Warehouse size={24} className="text-primary dark:text-dark-primary" />
                                             </div>
                                             <div>
-                                                <h2 className="text-xl font-bold text-text dark:text-dark-text">{factoryGroup.factory?.name}</h2>
-                                                <p className="text-sm text-text-secondary dark:text-dark-text-secondary">{factoryGroup.factory?.address}</p>
+                                                <h2 className="text-xl font-bold text-text dark:text-dark-text">{factoryGroup.factory?.name || 'Unknown Factory'}</h2>
+                                                <p className="text-sm text-text-secondary dark:text-dark-text-secondary">{factoryGroup.factory?.address || ''}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -363,11 +386,11 @@ const FactoryStockPage = () => {
                                         </div>
                                         <div className="bg-white/50 dark:bg-dark-background/50 rounded-lg p-3">
                                             <p className="text-xs text-text-secondary dark:text-dark-text-secondary">Pallet Boxes</p>
-                                            <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{factoryGroup.totalPalletBoxes}</p>
+                                            <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{factoryGroup.totalPalletBoxes.toLocaleString()}</p>
                                         </div>
                                         <div className="bg-white/50 dark:bg-dark-background/50 rounded-lg p-3">
                                             <p className="text-xs text-text-secondary dark:text-dark-text-secondary">Khatli Boxes</p>
-                                            <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{factoryGroup.totalKhatliBoxes}</p>
+                                            <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{factoryGroup.totalKhatliBoxes.toLocaleString()}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -377,21 +400,21 @@ const FactoryStockPage = () => {
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {Object.values(factoryGroup.tiles).map(tileStock => (
                                             <div
-                                                key={tileStock.tile?._id}
+                                                key={tileStock.tile?._id || Math.random()}
                                                 className="bg-background dark:bg-dark-background rounded-lg p-5 border border-border dark:border-dark-border hover:shadow-md transition-shadow"
                                             >
                                                 {/* Tile Header */}
                                                 <div className="mb-4 pb-4 border-b border-border dark:border-dark-border">
                                                     <h4 className="font-semibold text-text dark:text-dark-text text-lg flex items-center gap-2 mb-2">
                                                         <Box size={18} className="text-primary" />
-                                                        {tileStock.tile?.name}
+                                                        {tileStock.tile?.name || 'Unknown Tile'}
                                                     </h4>
                                                     <div className="flex gap-4 text-xs">
                                                         <span className="text-text-secondary dark:text-dark-text-secondary flex items-center gap-1">
-                                                            <Ruler size={12} /> {tileStock.tile?.size}
+                                                            <Ruler size={12} /> {tileStock.tile?.size || 'N/A'}
                                                         </span>
                                                         <span className="text-text-secondary dark:text-dark-text-secondary flex items-center gap-1">
-                                                            <Layers size={12} /> {tileStock.tile?.surface}
+                                                            <Layers size={12} /> {tileStock.tile?.surface || 'N/A'}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -406,7 +429,7 @@ const FactoryStockPage = () => {
                                                                 </div>
                                                                 <div>
                                                                     <p className="font-semibold text-blue-700 dark:text-blue-300 text-sm">Pallets</p>
-                                                                    <p className="text-xs text-blue-600 dark:text-blue-400">{tileStock.pallets.totalBoxes} boxes</p>
+                                                                    <p className="text-xs text-blue-600 dark:text-blue-400">{tileStock.pallets.totalBoxes.toLocaleString()} boxes</p>
                                                                 </div>
                                                             </div>
                                                             <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{tileStock.pallets.count}</p>
@@ -421,7 +444,7 @@ const FactoryStockPage = () => {
                                                                 </div>
                                                                 <div>
                                                                     <p className="font-semibold text-purple-700 dark:text-purple-300 text-sm">Khatlis</p>
-                                                                    <p className="text-xs text-purple-600 dark:text-purple-400">{tileStock.khatlis.totalBoxes} boxes</p>
+                                                                    <p className="text-xs text-purple-600 dark:text-purple-400">{tileStock.khatlis.totalBoxes.toLocaleString()} boxes</p>
                                                                 </div>
                                                             </div>
                                                             <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{tileStock.khatlis.count}</p>
@@ -443,81 +466,118 @@ const FactoryStockPage = () => {
             ) : (
                 // DETAIL VIEW
                 <div className="space-y-6">
-                    {selectedFactory && selectedFactorySummary && (
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-blue-200 dark:border-blue-900/50 p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm text-text-secondary dark:text-dark-text-secondary">Total Pallets</p>
-                                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-2">{selectedFactorySummary.byType.pallets.count}</p>
-                                    </div>
-                                    <Box size={32} className="text-blue-600/30 dark:text-blue-400/30" />
-                                </div>
-                            </div>
-                            <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-purple-200 dark:border-purple-900/50 p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm text-text-secondary dark:text-dark-text-secondary">Total Khatlis</p>
-                                        <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-2">{selectedFactorySummary.byType.khatlis.count}</p>
-                                    </div>
-                                    <Boxes size={32} className="text-purple-600/30 dark:text-purple-400/30" />
-                                </div>
-                            </div>
-                            <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-border dark:border-dark-border p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm text-text-secondary dark:text-dark-text-secondary">Pallet Boxes</p>
-                                        <p className="text-3xl font-bold text-primary dark:text-dark-primary mt-2">{selectedFactorySummary.byType.pallets.totalBoxes}</p>
-                                    </div>
-                                    <Package size={32} className="text-primary/30 dark:text-dark-primary/30" />
-                                </div>
-                            </div>
-                            <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-border dark:border-dark-border p-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <p className="text-sm text-text-secondary dark:text-dark-text-secondary">Khatli Boxes</p>
-                                        <p className="text-3xl font-bold text-primary dark:text-dark-primary mt-2">{selectedFactorySummary.byType.khatlis.totalBoxes}</p>
-                                    </div>
-                                    <Package size={32} className="text-primary/30 dark:text-dark-primary/30" />
-                                </div>
-                            </div>
+                    {!selectedFactory ? (
+                        <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-border dark:border-dark-border p-12 text-center">
+                            <Warehouse size={48} className="mx-auto text-text-secondary mb-4 opacity-50" />
+                            <p className="text-text-secondary dark:text-dark-text-secondary">Please select a factory to view detailed stock.</p>
                         </div>
-                    )}
-
-                    {loading ? (
+                    ) : loading ? (
                         <div className="flex justify-center items-center py-20">
                             <Loader2 size={40} className="animate-spin text-primary" />
                         </div>
-                    ) : aggregatedSelectedFactory.pallets.length === 0 && aggregatedSelectedFactory.khatlis.length === 0 ? (
-                        <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-border dark:border-dark-border p-12 text-center">
-                            <Warehouse size={48} className="mx-auto text-text-secondary mb-4 opacity-50" />
-                            <p className="text-text-secondary dark:text-dark-text-secondary">No stock found for {selectedFactoryName}.</p>
-                        </div>
                     ) : (
-                        <div className="space-y-8">
+                        <>
+                            {/* Factory Summary Cards */}
+                            {selectedFactorySummary && (
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-blue-200 dark:border-blue-900/50 p-6">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-sm text-text-secondary dark:text-dark-text-secondary">Total Pallets</p>
+                                                <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">{selectedFactorySummary.byType?.pallets?.count || 0}</p>
+                                            </div>
+                                            <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg">
+                                                <Package size={24} className="text-blue-600 dark:text-blue-400" />
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-text-secondary dark:text-dark-text-secondary mt-2">
+                                            {(selectedFactorySummary.byType?.pallets?.totalBoxes || 0).toLocaleString()} boxes
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-purple-200 dark:border-purple-900/50 p-6">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-sm text-text-secondary dark:text-dark-text-secondary">Total Khatlis</p>
+                                                <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">{selectedFactorySummary.byType?.khatlis?.count || 0}</p>
+                                            </div>
+                                            <div className="bg-purple-100 dark:bg-purple-900/30 p-3 rounded-lg">
+                                                <Boxes size={24} className="text-purple-600 dark:text-purple-400" />
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-text-secondary dark:text-dark-text-secondary mt-2">
+                                            {(selectedFactorySummary.byType?.khatlis?.totalBoxes || 0).toLocaleString()} boxes
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-green-200 dark:border-green-900/50 p-6">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-sm text-text-secondary dark:text-dark-text-secondary">Total Items</p>
+                                                <p className="text-3xl font-bold text-green-600 dark:text-green-400">{selectedFactorySummary.totalItems || 0}</p>
+                                            </div>
+                                            <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-lg">
+                                                <Layers size={24} className="text-green-600 dark:text-green-400" />
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-text-secondary dark:text-dark-text-secondary mt-2">Pallets + Khatlis</p>
+                                    </div>
+
+                                    <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-orange-200 dark:border-orange-900/50 p-6">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <p className="text-sm text-text-secondary dark:text-dark-text-secondary">Total Boxes</p>
+                                                <p className="text-3xl font-bold text-orange-600 dark:text-orange-400">{(selectedFactorySummary.totalBoxes || 0).toLocaleString()}</p>
+                                            </div>
+                                            <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg">
+                                                <Box size={24} className="text-orange-600 dark:text-orange-400" />
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-text-secondary dark:text-dark-text-secondary mt-2">Across all items</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* No Stock Message */}
+                            {aggregatedSelectedFactory.pallets.length === 0 && aggregatedSelectedFactory.khatlis.length === 0 && (
+                                <div className="bg-foreground dark:bg-dark-foreground rounded-lg border border-border dark:border-dark-border p-12 text-center">
+                                    <Warehouse size={48} className="mx-auto text-text-secondary mb-4 opacity-50" />
+                                    <p className="text-text-secondary dark:text-dark-text-secondary mb-2">No stock found for {selectedFactoryName}.</p>
+                                    <p className="text-sm text-text-secondary/70 dark:text-dark-text-secondary/70 mb-4">
+                                        Click "Add Custom" to manually add pallets or khatlis.
+                                    </p>
+                                    <button
+                                        onClick={() => setShowCreateModal(true)}
+                                        className="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white font-medium rounded-lg hover:bg-primary-hover transition-colors"
+                                    >
+                                        <Plus size={18} /> Add Custom Pallet/Khatli
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Pallets Section */}
                             {aggregatedSelectedFactory.pallets.length > 0 && (
                                 <div>
                                     <h2 className="text-2xl font-bold text-blue-600 dark:text-blue-400 mb-6 flex items-center gap-2">
-                                        <Box size={24} /> Pallets
+                                        <Package size={24} /> Pallets
                                     </h2>
                                     <div className="space-y-4">
                                         {aggregatedSelectedFactory.pallets.map(tileGroup => (
                                             <div
-                                                key={tileGroup.tile?._id}
+                                                key={tileGroup.tile?._id || Math.random()}
                                                 className="bg-foreground dark:bg-dark-foreground rounded-lg border border-blue-200 dark:border-blue-900/50 overflow-hidden hover:shadow-md transition-shadow"
                                             >
                                                 <div className="bg-gradient-to-r from-blue-50 to-blue-25 dark:from-blue-900/20 dark:to-blue-900/10 p-4 border-b border-blue-200 dark:border-blue-900/50">
                                                     <h3 className="text-lg font-bold text-blue-700 dark:text-blue-300 flex items-center gap-2">
-                                                        <Box size={18} className="text-blue-600 dark:text-blue-400" />
-                                                        {tileGroup.tile?.name}
+                                                        <Package size={18} className="text-blue-600 dark:text-blue-400" />
+                                                        {tileGroup.tile?.name || 'Unknown Tile'}
                                                     </h3>
                                                     <div className="flex gap-4 mt-2 text-sm">
                                                         <span className="text-text-secondary dark:text-dark-text-secondary flex items-center gap-1">
-                                                            <Ruler size={14} /> {tileGroup.tile?.size}
+                                                            <Ruler size={14} /> {tileGroup.tile?.size || 'N/A'}
                                                         </span>
                                                         <span className="text-text-secondary dark:text-dark-text-secondary flex items-center gap-1">
-                                                            <Layers size={14} /> {tileGroup.tile?.surface}
+                                                            <Layers size={14} /> {tileGroup.tile?.surface || 'N/A'}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -535,7 +595,7 @@ const FactoryStockPage = () => {
                                                                 <div>
                                                                     <p className="font-medium text-text dark:text-dark-text">{boxGroup.boxCount} boxes per pallet</p>
                                                                     <p className="text-xs text-text-secondary dark:text-dark-text-secondary">
-                                                                        Total: {boxGroup.items.length * boxGroup.boxCount} boxes
+                                                                        Total: {(boxGroup.items.length * boxGroup.boxCount).toLocaleString()} boxes
                                                                     </p>
                                                                 </div>
                                                             </div>
@@ -573,20 +633,20 @@ const FactoryStockPage = () => {
                                     <div className="space-y-4">
                                         {aggregatedSelectedFactory.khatlis.map(tileGroup => (
                                             <div
-                                                key={tileGroup.tile?._id}
+                                                key={tileGroup.tile?._id || Math.random()}
                                                 className="bg-foreground dark:bg-dark-foreground rounded-lg border border-purple-200 dark:border-purple-900/50 overflow-hidden hover:shadow-md transition-shadow"
                                             >
                                                 <div className="bg-gradient-to-r from-purple-50 to-purple-25 dark:from-purple-900/20 dark:to-purple-900/10 p-4 border-b border-purple-200 dark:border-purple-900/50">
                                                     <h3 className="text-lg font-bold text-purple-700 dark:text-purple-300 flex items-center gap-2">
                                                         <Boxes size={18} className="text-purple-600 dark:text-purple-400" />
-                                                        {tileGroup.tile?.name}
+                                                        {tileGroup.tile?.name || 'Unknown Tile'}
                                                     </h3>
                                                     <div className="flex gap-4 mt-2 text-sm">
                                                         <span className="text-text-secondary dark:text-dark-text-secondary flex items-center gap-1">
-                                                            <Ruler size={14} /> {tileGroup.tile?.size}
+                                                            <Ruler size={14} /> {tileGroup.tile?.size || 'N/A'}
                                                         </span>
                                                         <span className="text-text-secondary dark:text-dark-text-secondary flex items-center gap-1">
-                                                            <Layers size={14} /> {tileGroup.tile?.surface}
+                                                            <Layers size={14} /> {tileGroup.tile?.surface || 'N/A'}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -604,7 +664,7 @@ const FactoryStockPage = () => {
                                                                 <div>
                                                                     <p className="font-medium text-text dark:text-dark-text">{boxGroup.boxCount} boxes per khatli</p>
                                                                     <p className="text-xs text-text-secondary dark:text-dark-text-secondary">
-                                                                        Total: {boxGroup.items.length * boxGroup.boxCount} boxes
+                                                                        Total: {(boxGroup.items.length * boxGroup.boxCount).toLocaleString()} boxes
                                                                     </p>
                                                                 </div>
                                                             </div>
@@ -632,7 +692,7 @@ const FactoryStockPage = () => {
                                     </div>
                                 </div>
                             )}
-                        </div>
+                        </>
                     )}
                 </div>
             )}

@@ -2,14 +2,24 @@ import api from './api'; // The central axios instance
 
 // @desc    Get all factories
 // @route   GET /api/factories
-export const getAllFactories = () => {
-  return api.get('/factories');
+export const getAllFactories = async () => {
+  try {
+    const response = await api.get('/factories');
+    return response.data;
+  } catch (error) {
+    throw error.response?.data?.message || 'Failed to fetch factories';
+  }
 };
 
 // @desc    Get a single factory by its ID
 // @route   GET /api/factories/:id
-export const getFactoryById = (id) => {
-  return api.get(`/factories/${id}`);
+export const getFactoryById = async (id) => {
+  try {
+    const response = await api.get(`/factories/${id}`);
+    return response.data;
+  } catch (error) {
+    throw error.response?.data?.message || 'Failed to fetch factory';
+  }
 };
 
 // @desc    Create a new factory
