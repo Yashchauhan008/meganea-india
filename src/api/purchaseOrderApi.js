@@ -25,7 +25,6 @@ export const recordQCForItem = (poId, itemId, qcData) => {
 // --- ADD THIS NEW FUNCTION ---
 // @desc    Trigger the automatic generation of pallets for a PO
 // @route   POST /api/purchase-orders/:id/generate-pallets
-export const generatePalletsForPO = (poId) => {
-  // This endpoint doesn't need a request body, just the ID in the URL
-  return api.post(`/purchase-orders/${poId}/generate-pallets`);
+export const generatePalletsForPO = (poId, options = {}) => {
+  return api.post(`/purchase-orders/${poId}/generate-pallets`, options);
 };
