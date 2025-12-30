@@ -369,15 +369,15 @@
 // FILE LOCATION: src/pages/TileListPage.js
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { getAllTiles, deleteTile, getTileById, getUniqueSizes } from '../api/tileApi';
+import { getAllTiles, deleteTile, getUniqueSizes } from '../api/tileApi';
 import TileFormModal from '../components/tiles/TileFormModal';
 import TileDetailModal from '../components/tiles/TileDetailModal';
 import BulkUploadModal from '../components/tiles/BulkUploadModal';
 import { 
     PlusCircle, Edit, Trash2, Layers, Search, ChevronLeft, ChevronRight, 
-    Factory, Upload, Loader2, RefreshCw, Grid, List, Eye, Ruler, 
-    Box, Package, AlertCircle, X, Filter, SlidersHorizontal, Sparkles,
-    TrendingUp, Archive, CheckCircle, XCircle, MoreVertical, Image
+    Factory, Upload, Loader2, Grid, List, Eye, Ruler, 
+    Box, Package, AlertCircle, X, Sparkles, Truck,
+    TrendingUp, CheckCircle, Image
 } from 'lucide-react';
 import useDebounce from '../hooks/useDebounce';
 import { LazyLoadImage } from 'react-lazy-load-image-component';
@@ -404,14 +404,13 @@ const ImageLightbox = ({ src, alt, onClose }) => (
 );
 
 // Tile Card Component
-const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) => {
-    const [showMenu, setShowMenu] = useState(false);
-    
+const TileCard = ({ tile, onView, onEdit, onDelete, onImageClick, viewMode }) => {
     const stockDetails = tile.stockDetails || {};
     const availableStock = stockDetails.availableStock || 0;
     const bookedStock = stockDetails.bookedStock || 0;
     const restockingStock = stockDetails.restockingStock || 0;
     const inFactoryStock = stockDetails.inFactoryStock || 0;
+    const transitStock = stockDetails.transitStock || 0;
     const totalStock = availableStock + bookedStock + inFactoryStock;
 
     const getStockStatus = () => {
@@ -424,11 +423,14 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
 
     if (viewMode === 'list') {
         return (
-            <div className="flex flex-col md:flex-row bg-foreground dark:bg-dark-foreground border border-border dark:border-dark-border rounded-xl shadow-sm overflow-hidden hover:shadow-lg transition-all group">
+            <div 
+                className="flex flex-col md:flex-row bg-foreground dark:bg-dark-foreground border border-border dark:border-dark-border rounded-xl shadow-sm overflow-hidden hover:shadow-lg hover:border-primary/50 transition-all group cursor-pointer"
+                onClick={() => onView(tile._id)}
+            >
                 {/* Image */}
                 <div 
-                    className="w-full md:w-48 h-48 md:h-auto flex-shrink-0 bg-background dark:bg-dark-background cursor-pointer relative overflow-hidden"
-                    onClick={() => onView(tile._id)}
+                    className="w-full md:w-48 h-48 md:h-auto flex-shrink-0 bg-background dark:bg-dark-background relative overflow-hidden"
+                    onClick={(e) => { e.stopPropagation(); onImageClick({ src: tile.imageUrl, alt: tile.name }); }}
                 >
                     {tile.imageUrl ? (
                         <LazyLoadImage
@@ -451,10 +453,7 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
                 {/* Content */}
                 <div className="flex-grow p-5 flex flex-col">
                     <div className="flex justify-between items-start mb-3">
-                        <div 
-                            className="cursor-pointer hover:opacity-80 transition-opacity"
-                            onClick={() => onView(tile._id)}
-                        >
+                        <div>
                             <div className="flex items-center gap-2 mb-1">
                                 <h3 className="font-bold text-xl text-text dark:text-dark-text">{tile.name}</h3>
                                 {tile.number && (
@@ -471,16 +470,16 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
                                 </span>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                             <button 
                                 onClick={() => onView(tile._id)} 
-                                className="p-2 text-text-secondary hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
                                 title="View Details"
                             >
                                 <Eye size={18} />
                             </button>
                             <button 
-                                onClick={() => onEdit(tile._id)} 
+                                onClick={() => onEdit(tile)} 
                                 className="p-2 text-text-secondary hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
                                 title="Edit Tile"
                             >
@@ -496,8 +495,8 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
                         </div>
                     </div>
 
-                    {/* Stock Info */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                    {/* Stock Info - 5 columns with actual values */}
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
                         <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-center">
                             <p className="text-lg font-bold text-green-600 dark:text-green-400">{availableStock}</p>
                             <p className="text-xs text-green-700 dark:text-green-300">Available</p>
@@ -513,6 +512,10 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
                         <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-center">
                             <p className="text-lg font-bold text-purple-600 dark:text-purple-400">{inFactoryStock}</p>
                             <p className="text-xs text-purple-700 dark:text-purple-300">In Factory</p>
+                        </div>
+                        <div className="p-2 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg text-center">
+                            <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">{transitStock}</p>
+                            <p className="text-xs text-cyan-700 dark:text-cyan-300">In Transit</p>
                         </div>
                     </div>
 
@@ -543,11 +546,14 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
 
     // Grid View
     return (
-        <div className="bg-foreground dark:bg-dark-foreground border border-border dark:border-dark-border rounded-xl shadow-sm overflow-hidden hover:shadow-lg transition-all group">
+        <div 
+            className="bg-foreground dark:bg-dark-foreground border border-border dark:border-dark-border rounded-xl shadow-sm overflow-hidden hover:shadow-lg hover:border-primary/50 transition-all group cursor-pointer"
+            onClick={() => onView(tile._id)}
+        >
             {/* Image */}
             <div 
-                className="relative h-48 bg-background dark:bg-dark-background cursor-pointer overflow-hidden"
-                onClick={() => onView(tile._id)}
+                className="relative h-48 bg-background dark:bg-dark-background overflow-hidden"
+                onClick={(e) => { e.stopPropagation(); onImageClick({ src: tile.imageUrl, alt: tile.name }); }}
             >
                 {tile.imageUrl ? (
                     <LazyLoadImage
@@ -572,23 +578,23 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
                 </span>
 
                 {/* Actions */}
-                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
                     <button 
-                        onClick={(e) => { e.stopPropagation(); onView(tile._id); }} 
+                        onClick={() => onView(tile._id)} 
                         className="p-1.5 bg-white/90 dark:bg-dark-foreground/90 rounded-lg hover:bg-white dark:hover:bg-dark-foreground transition-colors"
                         title="View"
                     >
-                        <Eye size={14} className="text-blue-500" />
+                        <Eye size={14} className="text-primary" />
                     </button>
                     <button 
-                        onClick={(e) => { e.stopPropagation(); onEdit(tile._id); }} 
+                        onClick={() => onEdit(tile)} 
                         className="p-1.5 bg-white/90 dark:bg-dark-foreground/90 rounded-lg hover:bg-white dark:hover:bg-dark-foreground transition-colors"
                         title="Edit"
                     >
                         <Edit size={14} className="text-primary" />
                     </button>
                     <button 
-                        onClick={(e) => { e.stopPropagation(); onDelete(tile._id); }} 
+                        onClick={() => onDelete(tile._id)} 
                         className="p-1.5 bg-white/90 dark:bg-dark-foreground/90 rounded-lg hover:bg-white dark:hover:bg-dark-foreground transition-colors"
                         title="Archive"
                     >
@@ -604,8 +610,8 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
 
             {/* Content */}
             <div className="p-4">
-                <div className="mb-3 cursor-pointer" onClick={() => onView(tile._id)}>
-                    <h3 className="font-bold text-lg text-text dark:text-dark-text truncate hover:text-primary transition-colors" title={tile.name}>
+                <div className="mb-3">
+                    <h3 className="font-bold text-lg text-text dark:text-dark-text truncate" title={tile.name}>
                         {tile.name}
                     </h3>
                     <div className="flex items-center gap-2 text-sm text-text-secondary dark:text-dark-text-secondary">
@@ -614,15 +620,19 @@ const TileCard = ({ tile, onEdit, onDelete, onImageClick, onView, viewMode }) =>
                     </div>
                 </div>
 
-                {/* Quick Stats */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
+                {/* Quick Stats - 3 columns with actual values */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
                     <div className="p-2 bg-green-50 dark:bg-green-900/20 rounded-lg text-center">
                         <p className="text-sm font-bold text-green-600 dark:text-green-400">{availableStock}</p>
                         <p className="text-xs text-green-700 dark:text-green-300">Available</p>
                     </div>
                     <div className="p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg text-center">
                         <p className="text-sm font-bold text-purple-600 dark:text-purple-400">{inFactoryStock}</p>
-                        <p className="text-xs text-purple-700 dark:text-purple-300">In Factory</p>
+                        <p className="text-xs text-purple-700 dark:text-purple-300">Factory</p>
+                    </div>
+                    <div className="p-2 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg text-center">
+                        <p className="text-sm font-bold text-cyan-600 dark:text-cyan-400">{transitStock}</p>
+                        <p className="text-xs text-cyan-700 dark:text-cyan-300">Transit</p>
                     </div>
                 </div>
 
@@ -653,7 +663,7 @@ const TileListPage = () => {
     const [tiles, setTiles] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isFormModalOpen, setIsFormModalOpen] = useState(false);
     const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
     const [editingTile, setEditingTile] = useState(null);
     const [viewingTileId, setViewingTileId] = useState(null);
@@ -662,7 +672,7 @@ const TileListPage = () => {
     const [sizeFilter, setSizeFilter] = useState('');
     const [surfaceFilter, setSurfaceFilter] = useState('');
     const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
-    const [viewMode, setViewMode] = useState('grid'); // 'grid' or 'list'
+    const [viewMode, setViewMode] = useState('grid');
     const [allUniqueSizes, setAllUniqueSizes] = useState([]);
     const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
@@ -713,7 +723,7 @@ const TileListPage = () => {
 
     // Calculate summary stats
     const summaryStats = useMemo(() => {
-        let totalAvailable = 0, totalBooked = 0, totalRestocking = 0, totalInFactory = 0;
+        let totalAvailable = 0, totalBooked = 0, totalRestocking = 0, totalInFactory = 0, totalTransit = 0;
         
         tiles.forEach(tile => {
             const stock = tile.stockDetails || {};
@@ -721,6 +731,7 @@ const TileListPage = () => {
             totalBooked += stock.bookedStock || 0;
             totalRestocking += stock.restockingStock || 0;
             totalInFactory += stock.inFactoryStock || 0;
+            totalTransit += stock.transitStock || 0;
         });
 
         return {
@@ -729,23 +740,23 @@ const TileListPage = () => {
             totalBooked,
             totalRestocking,
             totalInFactory,
+            totalTransit,
             lowStockCount: tiles.filter(t => (t.stockDetails?.availableStock || 0) < (t.restockThreshold || 10)).length
         };
     }, [tiles, pagination.total]);
 
-    const handleAdd = () => { setEditingTile(null); setIsModalOpen(true); };
-    const handleView = (id) => { setViewingTileId(id); };
-    const handleEdit = async (id) => {
-        setViewingTileId(null); // Close detail modal if open
-        try {
-            const response = await getTileById(id);
-            const data = response?.data || response;
-            setEditingTile(data);
-            setIsModalOpen(true);
-        } catch (err) {
-            console.error('Failed to fetch tile:', err);
-        }
+    const handleAdd = () => { setEditingTile(null); setIsFormModalOpen(true); };
+    
+    const handleView = (tileId) => {
+        setViewingTileId(tileId);
     };
+
+    const handleEdit = (tile) => {
+        setViewingTileId(null); // Close detail modal if open
+        setEditingTile(tile);
+        setIsFormModalOpen(true);
+    };
+
     const handleDelete = async (id) => {
         if (window.confirm('Are you sure you want to archive this tile?')) {
             try {
@@ -756,9 +767,11 @@ const TileListPage = () => {
             }
         }
     };
+
     const handlePageChange = (newPage) => {
         setPagination(prev => ({ ...prev, page: newPage }));
     };
+
     const clearFilters = () => {
         setSearchTerm('');
         setSizeFilter('');
@@ -790,10 +803,16 @@ const TileListPage = () => {
     return (
         <div className="p-4 sm:p-6 md:p-8 space-y-6">
             {/* Modals */}
-            {isModalOpen && (
+            {isFormModalOpen && (
                 <TileFormModal 
                     tile={editingTile} 
-                    onClose={() => setIsModalOpen(false)} 
+                    onClose={() => setIsFormModalOpen(false)} 
+                    onSave={fetchTiles} 
+                />
+            )}
+            {isBulkUploadOpen && (
+                <BulkUploadModal 
+                    onClose={() => setIsBulkUploadOpen(false)} 
                     onSave={fetchTiles} 
                 />
             )}
@@ -802,12 +821,6 @@ const TileListPage = () => {
                     tileId={viewingTileId}
                     onClose={() => setViewingTileId(null)}
                     onEdit={handleEdit}
-                />
-            )}
-            {isBulkUploadOpen && (
-                <BulkUploadModal 
-                    onClose={() => setIsBulkUploadOpen(false)} 
-                    onSuccess={fetchTiles} 
                 />
             )}
             {expandedImage && (
@@ -842,8 +855,8 @@ const TileListPage = () => {
                 </div>
             </div>
 
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {/* Summary Cards - 7 cards including Transit */}
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
                 <div className="bg-foreground dark:bg-dark-foreground rounded-xl p-4 border border-border dark:border-dark-border">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
@@ -896,6 +909,17 @@ const TileListPage = () => {
                         <div>
                             <p className="text-2xl font-bold text-text dark:text-dark-text">{summaryStats.totalInFactory.toLocaleString()}</p>
                             <p className="text-xs text-text-secondary dark:text-dark-text-secondary">In Factory</p>
+                        </div>
+                    </div>
+                </div>
+                <div className="bg-foreground dark:bg-dark-foreground rounded-xl p-4 border border-border dark:border-dark-border">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-cyan-100 dark:bg-cyan-900/30 rounded-lg">
+                            <Truck size={20} className="text-cyan-600 dark:text-cyan-400" />
+                        </div>
+                        <div>
+                            <p className="text-2xl font-bold text-text dark:text-dark-text">{summaryStats.totalTransit.toLocaleString()}</p>
+                            <p className="text-xs text-text-secondary dark:text-dark-text-secondary">In Transit</p>
                         </div>
                     </div>
                 </div>
@@ -1031,9 +1055,9 @@ const TileListPage = () => {
                                         <TileCard
                                             key={tile._id}
                                             tile={tile}
+                                            onView={handleView}
                                             onEdit={handleEdit}
                                             onDelete={handleDelete}
-                                            onView={handleView}
                                             onImageClick={setExpandedImage}
                                             viewMode="grid"
                                         />
@@ -1045,9 +1069,9 @@ const TileListPage = () => {
                                         <TileCard
                                             key={tile._id}
                                             tile={tile}
+                                            onView={handleView}
                                             onEdit={handleEdit}
                                             onDelete={handleDelete}
-                                            onView={handleView}
                                             onImageClick={setExpandedImage}
                                             viewMode="list"
                                         />
