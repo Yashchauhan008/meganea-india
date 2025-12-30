@@ -1,8 +1,8 @@
-// FILE: frontend/src/pages/FactoryPage.js
+// FILE: frontend/src/pages/FactoryListPage.js
 // 
 // Add to AppRoutes.js:
-// import FactoryPage from '../pages/FactoryPage';
-// <Route path="/factories" element={<FactoryPage />} />
+// import FactoryListPage from '../pages/FactoryListPage';
+// <Route path="/factories" element={<FactoryListPage />} />
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +17,7 @@ import {
 import { useAuth } from '../hooks/useAuth';
 import useDebounce from '../hooks/useDebounce';
 
-const FactoryPage = () => {
+const FactoryListPage = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
     const isAdmin = user?.role === 'Admin' || user?.role === 'admin';
@@ -45,7 +45,7 @@ const FactoryPage = () => {
             const data = response?.data || response || [];
             setFactories(Array.isArray(data) ? data : []);
         } catch (err) {
-            console.error('[FactoryPage] Fetch error:', err);
+            console.error('[FactoryListPage] Fetch error:', err);
             setError(err?.response?.data?.message || 'Failed to fetch factories.');
         } finally {
             setLoading(false);
@@ -95,7 +95,7 @@ const FactoryPage = () => {
             
             setFactoryStock(stockByFactory);
         } catch (err) {
-            console.error('[FactoryPage] Stock fetch error:', err);
+            console.error('[FactoryListPage] Stock fetch error:', err);
         }
     }, []);
 
@@ -663,4 +663,4 @@ const FactoryPage = () => {
     );
 };
 
-export default FactoryPage;
+export default FactoryListPage;
