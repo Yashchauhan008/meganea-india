@@ -1,54 +1,51 @@
-// FILE LOCATION: frontend/src/api/tileApi.js
+// FILE: frontend/src/api/tileApi.js
 
 import api from './api';
 
-// Fetches all tiles with filters
+// Fetches all tiles with filters. This now returns populated factory data.
 export const getAllTiles = (params) => {
     return api.get('/tiles', { params });
 };
 
-// Fetches a single tile
+// Fetches a single tile. This also returns populated factory data.
 export const getTileById = (id) => {
     return api.get(`/tiles/${id}`);
 };
 
-// Creates a new tile
+// Fetches detailed stock information for a tile
+export const getTileStockDetails = (id) => {
+    return api.get(`/tiles/${id}/stock-details`);
+};
+
+// Creates a new tile. The `tileData` object will now include the `manufacturingFactories` array.
 export const createTile = (tileData) => {
     return api.post('/tiles', tileData);
 };
 
-// Updates a tile
+// Updates a tile. The `tileData` object will also include the `manufacturingFactories` array.
 export const updateTile = (id, tileData) => {
     return api.put(`/tiles/${id}`, tileData);
 };
 
-// Deletes a tile (soft delete)
+// Deletes a tile (soft delete). No changes needed here.
 export const deleteTile = (id) => {
     return api.delete(`/tiles/${id}`);
 };
 
-// Searches tiles for the booking form
+// Searches tiles for the booking form. No changes needed here.
 export const searchTilesForBooking = (searchTerm) => {
   return api.get('/tiles/for-booking', { params: { search: searchTerm } });
 };
 
-// Get unique tile sizes
 export const getUniqueSizes = () => {
     return api.get('/tiles/sizes');
 };
 
-// Bulk create tiles
 export const bulkCreateTiles = (tiles) => {
+    // The payload is an object with a 'tiles' key containing the array
     return api.post('/tiles/bulk', { tiles });
 };
 
-// Get tiles by factory
 export const getTilesByFactory = (factoryId) => {
     return api.get(`/tiles/by-factory/${factoryId}`);
-};
-
-// NEW: Get detailed stock information for a tile
-// Returns: factory stock by factory, transit stock, loaded stock
-export const getTileStockDetails = (tileId) => {
-    return api.get(`/tiles/${tileId}/stock-details`);
 };

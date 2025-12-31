@@ -506,14 +506,21 @@ const TileDetailModal = ({ tileId, onClose, onEdit }) => {
     const handleExportPDF = async () => {
         if (!tile) return;
         
+        // Build subtitle safely - only include values that exist
+        const subtitleParts = [];
+        if (tile.tileNumber) subtitleParts.push(tile.tileNumber);
+        if (tile.size) subtitleParts.push(tile.size);
+        if (tile.surface) subtitleParts.push(tile.surface);
+        const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' | ') : '';
+        
         await generatePDFReport({
             title: `Tile - ${tile.name}`,
-            subtitle: `${tile.tileNumber} | ${tile.size} | ${tile.surface}`,
+            subtitle: subtitle,
             headerInfo: [
-                { label: 'Tile Number', value: tile.tileNumber },
-                { label: 'Name', value: tile.name },
-                { label: 'Size', value: tile.size },
-                { label: 'Surface', value: tile.surface },
+                { label: 'Tile Number', value: tile.tileNumber || '-' },
+                { label: 'Name', value: tile.name || '-' },
+                { label: 'Size', value: tile.size || '-' },
+                { label: 'Surface', value: tile.surface || '-' },
                 { label: 'Boxes per Sq.M', value: tile.boxesPerSqMeter || 'N/A' },
                 { label: 'Restock Threshold', value: tile.restockThreshold || 0 },
                 { label: 'Status', value: tile.status || 'Active' },
@@ -523,8 +530,8 @@ const TileDetailModal = ({ tileId, onClose, onEdit }) => {
                 { label: 'Available', value: tile.stockDetails?.availableStock || 0, color: 'green' },
                 { label: 'Booked', value: tile.stockDetails?.bookedStock || 0, color: 'blue' },
                 { label: 'Restocking', value: tile.stockDetails?.restockingStock || 0, color: 'orange' },
-                { label: 'In Factory', value: factoryStock.total, color: 'purple' },
-                { label: 'In Transit', value: transitStock.total, color: 'blue' },
+                { label: 'In Factory', value: factoryStock.total || 0, color: 'purple' },
+                { label: 'In Transit', value: transitStock.total || 0, color: 'cyan' },
             ],
             tableColumns: [
                 { key: 'sNo', header: 'S.No', width: 15 },
@@ -540,7 +547,7 @@ const TileDetailModal = ({ tileId, onClose, onEdit }) => {
                 khatlis: f.khatlis || 0,
                 boxes: f.boxes || 0,
             })),
-            fileName: `Tile_${tile.tileNumber}`,
+            fileName: `Tile_${tile.tileNumber || tile.name || 'details'}`,
             orientation: 'portrait',
         });
     };
@@ -551,16 +558,16 @@ const TileDetailModal = ({ tileId, onClose, onEdit }) => {
         await generateExcelReport({
             title: `Tile - ${tile.name}`,
             headerInfo: [
-                { label: 'Tile Number', value: tile.tileNumber },
-                { label: 'Name', value: tile.name },
-                { label: 'Size', value: tile.size },
-                { label: 'Surface', value: tile.surface },
+                { label: 'Tile Number', value: tile.tileNumber || '-' },
+                { label: 'Name', value: tile.name || '-' },
+                { label: 'Size', value: tile.size || '-' },
+                { label: 'Surface', value: tile.surface || '-' },
             ],
             summaryData: [
                 { label: 'Available Stock', value: tile.stockDetails?.availableStock || 0 },
                 { label: 'Booked Stock', value: tile.stockDetails?.bookedStock || 0 },
-                { label: 'In Factory', value: factoryStock.total },
-                { label: 'In Transit', value: transitStock.total },
+                { label: 'In Factory', value: factoryStock.total || 0 },
+                { label: 'In Transit', value: transitStock.total || 0 },
             ],
             tableColumns: [
                 { key: 'sNo', header: 'S.No' },
@@ -576,7 +583,7 @@ const TileDetailModal = ({ tileId, onClose, onEdit }) => {
                 khatlis: f.khatlis || 0,
                 boxes: f.boxes || 0,
             })),
-            fileName: `Tile_${tile.tileNumber}`,
+            fileName: `Tile_${tile.tileNumber || tile.name || 'details'}`,
             sheetName: 'Tile Details',
         });
     };
