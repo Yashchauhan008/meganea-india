@@ -161,6 +161,7 @@ import ContainerListPage from '../pages/ContainerListPage';
 import DispatchListPage from '../pages/DispatchListPage';
 import FactoryListPage from '../pages/FactoryPage';
 import CreateDispatchOrderPage from '../pages/CreateDispatchOrderPage';
+import ReportsPage from '../pages/ReportsPage';
 
 const AppRoutes = () => {
     // Roles that can access India module
@@ -209,6 +210,8 @@ const AppRoutes = () => {
                                 {/* Dispatches */}
                                 <Route path="/dispatches" element={<DispatchListPage />} />
                                 <Route path="/dispatches/create" element={<CreateDispatchOrderPage />} />
+
+                                <Route path="/reports" element={<ReportsPage />} />
 
                                 {/* Catch-all - redirect to dashboard */}
                                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

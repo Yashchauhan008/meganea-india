@@ -131,7 +131,7 @@ import { useAuth } from '../../hooks/useAuth';
 import {
     LayoutDashboard, Inbox, Boxes, ClipboardList, Warehouse, Ship, LogOut, 
     ChevronLeft, Menu, Sun, Moon, Building2, Package, Truck, Layers,
-    Factory, Send, Settings, Users, BarChart3
+    Factory, Send, Settings, Users, BarChart3, FileText
 } from 'lucide-react';
 
 // Get user initials for avatar
@@ -217,6 +217,13 @@ const Sidebar = () => {
                 { to: "/loading-plans", icon: Ship, text: "Loading Plans", roles: ['admin', 'Admin', 'india-staff', 'India Staff'] },
                 { to: "/containers", icon: Package, text: "Containers", roles: ['admin', 'Admin', 'india-staff', 'India Staff'] },
                 { to: "/dispatches", icon: Truck, text: "Dispatches", roles: ['admin', 'Admin', 'india-staff', 'India Staff'] },
+            ]
+        },
+        // Reports
+        {
+            section: 'Reports',
+            items: [
+                { to: "/reports", icon: BarChart3, text: "Reports Center", roles: ['admin', 'Admin', 'india-staff', 'India Staff'] },
             ]
         },
     ];
